@@ -1,0 +1,54 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- Mone monkey mascot. Line-art in the friendly style of the Seal icon. -->
+    <group
+        android:name="monkey"
+        android:pivotX="54"
+        android:pivotY="52"
+        android:scaleX="0.9"
+        android:scaleY="0.9">
+
+        <!-- Ears (outer + inner) -->
+        <path android:fillColor="#FFFFFFFF" android:strokeColor="#FF1A1A1A" android:strokeWidth="3.2"
+            android:strokeLineCap="round" android:strokeLineJoin="round"
+            android:pathData="M19,41 a11,11 0 1,0 22,0 a11,11 0 1,0 -22,0 z" />
+        <path android:fillColor="#FFFFFFFF" android:strokeColor="#FF1A1A1A" android:strokeWidth="3.2"
+            android:strokeLineCap="round" android:strokeLineJoin="round"
+            android:pathData="M67,41 a11,11 0 1,0 22,0 a11,11 0 1,0 -22,0 z" />
+        <path android:fillColor="#FFFFFFFF" android:strokeColor="#FF1A1A1A" android:strokeWidth="3.2"
+            android:pathData="M25.5,41 a4.5,4.5 0 1,0 9,0 a4.5,4.5 0 1,0 -9,0 z" />
+        <path android:fillColor="#FFFFFFFF" android:strokeColor="#FF1A1A1A" android:strokeWidth="3.2"
+            android:pathData="M73.5,41 a4.5,4.5 0 1,0 9,0 a4.5,4.5 0 1,0 -9,0 z" />
+
+        <!-- Head -->
+        <path android:fillColor="#FFFFFFFF" android:strokeColor="#FF1A1A1A" android:strokeWidth="3.2"
+            android:strokeLineCap="round" android:strokeLineJoin="round"
+            android:pathData="M27,50 a27,25 0 1,0 54,0 a27,25 0 1,0 -54,0 z" />
+
+        <!-- Hair tuft -->
+        <path android:fillColor="#00000000" android:strokeColor="#FF1A1A1A" android:strokeWidth="3.2"
+            android:strokeLineCap="round" android:strokeLineJoin="round"
+            android:pathData="M51,27 Q54,19 57,27" />
+
+        <!-- Face patch -->
+        <path android:fillColor="#FFFFFFFF" android:strokeColor="#FF1A1A1A" android:strokeWidth="3.2"
+            android:strokeLineCap="round" android:strokeLineJoin="round"
+            android:pathData="M36.5,58 a17.5,15 0 1,0 35,0 a17.5,15 0 1,0 -35,0 z" />
+
+        <!-- Eyes -->
+        <path android:fillColor="#FF1A1A1A" android:pathData="M43.8,49 a3.2,3.2 0 1,0 6.4,0 a3.2,3.2 0 1,0 -6.4,0 z" />
+        <path android:fillColor="#FF1A1A1A" android:pathData="M57.8,49 a3.2,3.2 0 1,0 6.4,0 a3.2,3.2 0 1,0 -6.4,0 z" />
+
+        <!-- Nostrils -->
+        <path android:fillColor="#FF1A1A1A" android:pathData="M49.9,60 a1.6,1.6 0 1,0 3.2,0 a1.6,1.6 0 1,0 -3.2,0 z" />
+        <path android:fillColor="#FF1A1A1A" android:pathData="M54.9,60 a1.6,1.6 0 1,0 3.2,0 a1.6,1.6 0 1,0 -3.2,0 z" />
+
+        <!-- Mouth -->
+        <path android:fillColor="#00000000" android:strokeColor="#FF1A1A1A" android:strokeWidth="3.2"
+            android:strokeLineCap="round" android:strokeLineJoin="round"
+            android:pathData="M49,65 Q54,70 59,65" />
+    </group>
+</vector>
