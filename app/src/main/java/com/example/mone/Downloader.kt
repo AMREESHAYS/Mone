@@ -50,8 +50,15 @@ object Downloader {
         }
         val outDir = downloadDir().apply { mkdirs() }
         val cookies = cookiesFile(appContext)
-        fun withCookies(req: YtDlpRequest) =
-            req.also { if (cookies.exists()) it.addOption("--cookies", cookies.absolutePath) }
+        // Common options: cookies, single-video, and auto-retry transient network/DNS blips.
+        fun common(req: YtDlpRequest): YtDlpRequest {
+            if (cookies.exists()) req.addOption("--cookies", cookies.absolutePath)
+            return req
+                .addOption("--no-playlist")
+                .addOption("--retries", "3")
+                .addOption("--extractor-retries", "3")
+                .addOption("--socket-timeout", "30")
+        }
 
         val notifId = (System.currentTimeMillis() and 0xFFFFFF).toInt()
         // Per-job temp dir on the SAME volume as outDir, so publishing is an instant rename.
@@ -85,6 +92,21 @@ object Downloader {
             main.post { onResult(true, "Done ✓\nSaved to Mone folder & gallery") }
         }
 
+        // Turn raw yt-dlp errors into something a person can act on.
+        fun humanize(raw: String): String = when {
+            raw.contains("No address associated", true) ||
+                raw.contains("getaddrinfo", true) ||
+                raw.contains("Errno 7", true) ||
+                raw.contains("Temporary failure in name resolution", true) ||
+                raw.contains("Unable to download webpage", true) ->
+                "Network error — check your connection and try again."
+            raw.contains("Requested format is not available", true) ->
+                "Couldn't find a downloadable video at that link."
+            raw.contains("login", true) || raw.contains("empty media response", true) ->
+                "This post needs you to be logged in. Tap “Log in to Instagram”."
+            else -> "Failed:\n${raw.take(300)}"
+        }
+
         fun fail(message: String) {
             Notifications.failed(appContext, notifId, message)
             main.post { onResult(false, message) }
@@ -95,11 +117,10 @@ object Downloader {
                 YtDlp.init(appContext)
 
                 // 1) Best single file that already has audio+video — no merge needed.
-                val single = withCookies(
+                val single = common(
                     YtDlpRequest(url)
                         .setOutputTemplate("${jobDir.absolutePath}/%(title).80s.%(ext)s")
-                        .addOption("-f", "b")
-                        .addOption("--no-playlist"),
+                        .addOption("-f", "b"),
                 )
                 val r1 = try {
                     YtDlp.execute(single) { p, _, line -> prog(if (p >= 0f) p.toInt() else 0, line) }
@@ -115,19 +136,19 @@ object Downloader {
                 // 2) No single file (separate streams). Download video + audio, then mux.
                 main.post { onProgress(0, "Fetching video…") }
                 val rv = YtDlp.execute(
-                    withCookies(
+                    common(
                         YtDlpRequest(url)
                             .setOutputTemplate("${jobDir.absolutePath}/v.%(ext)s")
-                            .addOption("-f", "bv*").addOption("--hls-prefer-native").addOption("--no-playlist"),
+                            .addOption("-f", "bv*").addOption("--hls-prefer-native"),
                     ),
                 ) { p, _, line -> prog(if (p >= 0f) p.toInt() else 0, line) }
 
                 main.post { onProgress(0, "Fetching audio…") }
                 val ra = YtDlp.execute(
-                    withCookies(
+                    common(
                         YtDlpRequest(url)
                             .setOutputTemplate("${jobDir.absolutePath}/a.%(ext)s")
-                            .addOption("-f", "ba").addOption("--hls-prefer-native").addOption("--no-playlist"),
+                            .addOption("-f", "ba").addOption("--hls-prefer-native"),
                     ),
                 ) { p, _, line -> prog(if (p >= 0f) p.toInt() else 0, line) }
 
@@ -135,7 +156,7 @@ object Downloader {
                 val aFile = jobDir.listFiles { f -> f.name.startsWith("a.") }?.firstOrNull()
                 if (!rv.isSuccess || !ra.isSuccess || vFile == null || aFile == null) {
                     val why = rv.errorOutput.ifBlank { ra.errorOutput }.ifBlank { r1?.errorOutput.orEmpty() }
-                    fail("Failed:\n$why")
+                    fail(humanize(why))
                     return@thread
                 }
 
