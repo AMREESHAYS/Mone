@@ -1,53 +1,111 @@
-# Mone 🐵
+<div align="center">
 
-A simple Android app to download videos from Instagram, Pinterest, X, and 1000+ other sites — saved straight to your gallery. Built on [yt-dlp](https://github.com/yt-dlp/yt-dlp).
+<img src="images/logo.png" width="128" alt="Mone logo" />
 
-> [!WARNING]
-> **For personal use only.** Downloading content may violate the terms of service of Instagram, YouTube, Pinterest, and other platforms, and redistributing others' content may infringe copyright. You are responsible for how you use this app. It is not affiliated with, endorsed by, or connected to any of these platforms. Not available on Google Play by design.
+# Mone
 
-## Features
+**Download videos from Instagram, Pinterest, X & 1000+ sites — straight to your gallery.**
 
-- **Paste a link → download.** Reels, posts, and videos from 1000+ sites yt-dlp supports.
-- **Share to Mone.** Share a reel from Instagram straight into the app — no copy-paste.
-- **In-app Instagram login.** Sign in with your own account so login-gated reels work. Your session stays on your device, in private app storage — never shared.
-- **Best quality.** Grabs the best single-file stream, or downloads video + audio separately and merges them with ffmpeg.
-- **Saves to your gallery** in a dedicated `Mone` folder.
-- **Download notifications** and a **history** list of everything you've saved.
+A clean, open-source Android video downloader powered by [yt-dlp](https://github.com/yt-dlp/yt-dlp).
 
-## Install
+<br/>
 
-Grab the latest `app-release.apk` from the [Releases](../../releases) page and install it (you'll need to allow installing from unknown sources). Sideload only — this app is not on Google Play.
+[![Release](https://img.shields.io/github/v/release/AMREESHAYS/Mone?style=for-the-badge&color=FFC93C&labelColor=1A1A1A)](https://github.com/AMREESHAYS/Mone/releases/latest)
+[![Downloads](https://img.shields.io/github/downloads/AMREESHAYS/Mone/total?style=for-the-badge&color=FFC93C&labelColor=1A1A1A)](https://github.com/AMREESHAYS/Mone/releases)
+[![License](https://img.shields.io/github/license/AMREESHAYS/Mone?style=for-the-badge&color=FFC93C&labelColor=1A1A1A)](LICENSE)
+[![Stars](https://img.shields.io/github/stars/AMREESHAYS/Mone?style=for-the-badge&color=FFC93C&labelColor=1A1A1A)](https://github.com/AMREESHAYS/Mone/stargazers)
 
-On first launch it asks for **All files access** (to save into the `Mone` folder) and **notification** permission.
+![Platform](https://img.shields.io/badge/Android-7.0%2B-3DDC84?style=flat-square&logo=android&logoColor=white)
+![Kotlin](https://img.shields.io/badge/Kotlin-100%25-7F52FF?style=flat-square&logo=kotlin&logoColor=white)
+![yt-dlp](https://img.shields.io/badge/powered%20by-yt--dlp-red?style=flat-square)
 
-## How it works
+<br/>
 
-Mone is a thin Kotlin front-end. The actual downloading is done by **yt-dlp** (embedded via [yt-dlp-android](https://github.com/ffmpegkit-maintained/yt-dlp-android), which bundles Python), and merging is done by **ffmpeg-kit**. Instagram authentication uses a WebView login that captures your cookies locally for yt-dlp.
+<a href="https://github.com/AMREESHAYS/Mone/releases/latest">
+<img src="https://img.shields.io/badge/⬇%20Download%20APK-FFC93C?style=for-the-badge&labelColor=1A1A1A&color=FFC93C" alt="Download APK" height="44" />
+</a>
 
-## Build from source
+</div>
 
-Requirements: Android Studio, JDK 17+, an Android device or emulator (arm64-v8a or x86_64).
+<br/>
+
+<div align="center">
+<img src="images/screenshot-main.png" width="300" alt="Mone main screen" />
+</div>
+
+<br/>
+
+## ✨ Features
+
+- 🔗 **Paste & download** — reels, posts, and videos from 1000+ sites yt-dlp supports.
+- 📲 **Share to Mone** — share a reel straight from Instagram into the app. No copy-paste.
+- 🔐 **In-app Instagram login** — sign in with your own account for login-gated reels. Your session stays in private on-device storage, never shared.
+- 🎬 **Best quality** — grabs the best single file, or downloads video + audio separately and merges them with ffmpeg.
+- 🖼️ **Saves to your gallery** — into a dedicated `Mone` folder.
+- 🔔 **Notifications** — live download progress, tap when done to play.
+- 🕑 **History** — everything you've downloaded, one tap to replay.
+
+## 📥 Install
+
+1. Download the latest **`Mone-vX.Y.Z.apk`** from the [**Releases**](https://github.com/AMREESHAYS/Mone/releases/latest) page.
+2. Open it on your Android phone and allow **install from unknown sources**.
+3. On first launch, grant **All files access** (to save into the `Mone` folder) and **notifications**.
+
+> Sideload only — not on Google Play, by design.
+
+## 🚀 Usage
+
+- **Any video:** paste the link and tap **Download**.
+- **Instagram reels:** tap **Log in to Instagram** once and sign in with your own account, then download.
+- **From other apps:** hit **Share → Mone** and confirm.
+
+## 🛠️ Build from source
+
+Requires Android Studio, JDK 17+, and a device/emulator (`arm64-v8a` or `x86_64`).
 
 ```bash
 git clone https://github.com/AMREESHAYS/Mone.git
 cd Mone
 ./gradlew assembleDebug
-# APK: app/build/outputs/apk/debug/app-debug.apk
+# → app/build/outputs/apk/debug/app-debug.apk
 ```
 
-## Limitations (honest)
+## 🧩 How it works
 
-- Instagram reels require logging in with your own account (cookies).
-- ffmpeg is the free/LGPL build — some codecs and best-quality merges may be limited.
-- yt-dlp is bundled at a fixed version; sites change often, so extractors can break until the library updates.
-- Depends on a young third-party library; treat it as experimental.
+Mone is a thin Kotlin front-end. The heavy lifting is done by:
 
-## Credits
+| Layer | Library |
+|-------|---------|
+| Download engine | [**yt-dlp**](https://github.com/yt-dlp/yt-dlp) (embedded Python via [yt-dlp-android](https://github.com/ffmpegkit-maintained/yt-dlp-android)) |
+| Media merging | [**ffmpeg-kit**](https://github.com/ffmpegkit-maintained/ffmpeg-kit) |
+| Auth | WebView Instagram login → local cookies |
+
+## ⚠️ Limitations
+
+- Instagram reels require logging in with your own account.
+- Uses the free/LGPL ffmpeg build — some codecs and max-resolution merges may be limited.
+- yt-dlp is bundled at a fixed version; sites change often, so an extractor can break until the library updates.
+- Built on a young third-party library — treat as experimental.
+
+## 🤝 Contributing
+
+Issues and pull requests are welcome. Fork it, branch, and open a PR.
+
+## 📄 Disclaimer
+
+Mone is for **personal use only**. Downloading content may violate the terms of service of Instagram, YouTube, Pinterest, and other platforms, and redistributing others' content may infringe copyright. **You are solely responsible for how you use this app.** It is not affiliated with, endorsed by, or connected to any of these platforms.
+
+## 🙏 Credits
 
 - [yt-dlp](https://github.com/yt-dlp/yt-dlp) — the download engine
 - [yt-dlp-android](https://github.com/ffmpegkit-maintained/yt-dlp-android) — Android bindings
 - [ffmpeg-kit](https://github.com/ffmpegkit-maintained/ffmpeg-kit) — media muxing
 
-## License
+## 📜 License
 
-[GPL-3.0](LICENSE) © AMREESHAYS
+[GPL-3.0](LICENSE) © [AMREESHAYS](https://github.com/AMREESHAYS)
+
+<div align="center">
+<br/>
+Made with 🍌 and yt-dlp
+</div>

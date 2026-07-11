@@ -30,7 +30,8 @@ object HistoryStore {
         )
         return (0 until arr.length()).map { i ->
             val o = arr.getJSONObject(i)
-            Entry(o.getString("name"), o.getLong("time"), o.optString("uri").ifBlank { null })
+            val uri = if (o.isNull("uri")) null else o.getString("uri")
+            Entry(o.getString("name"), o.getLong("time"), uri)
         }
     }
 

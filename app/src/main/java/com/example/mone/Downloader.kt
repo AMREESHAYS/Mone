@@ -63,11 +63,16 @@ object Downloader {
             main.post { onProgress(pct, line) }
         }
 
-        // Move a finished file out of the private job dir into the public Mone folder.
+        // Move a finished file out of the private job dir into the public Mone folder,
+        // giving it a unique name so a same-titled earlier download is never clobbered.
         fun publish(file: File): File {
-            val dest = File(outDir, file.name)
-            if (dest.exists()) dest.delete()
-            if (!file.renameTo(dest)) file.copyTo(dest, overwrite = true)
+            var dest = File(outDir, file.name)
+            var i = 1
+            while (dest.exists()) {
+                dest = File(outDir, "${file.nameWithoutExtension} ($i).${file.extension}")
+                i++
+            }
+            if (!file.renameTo(dest)) file.copyTo(dest, overwrite = false)
             return dest
         }
 
@@ -93,7 +98,8 @@ object Downloader {
                 val single = withCookies(
                     YtDlpRequest(url)
                         .setOutputTemplate("${jobDir.absolutePath}/%(title).80s.%(ext)s")
-                        .addOption("-f", "b"),
+                        .addOption("-f", "b")
+                        .addOption("--no-playlist"),
                 )
                 val r1 = try {
                     YtDlp.execute(single) { p, _, line -> prog(if (p >= 0f) p.toInt() else 0, line) }
@@ -112,7 +118,7 @@ object Downloader {
                     withCookies(
                         YtDlpRequest(url)
                             .setOutputTemplate("${jobDir.absolutePath}/v.%(ext)s")
-                            .addOption("-f", "bv*").addOption("--hls-prefer-native"),
+                            .addOption("-f", "bv*").addOption("--hls-prefer-native").addOption("--no-playlist"),
                     ),
                 ) { p, _, line -> prog(if (p >= 0f) p.toInt() else 0, line) }
 
@@ -121,7 +127,7 @@ object Downloader {
                     withCookies(
                         YtDlpRequest(url)
                             .setOutputTemplate("${jobDir.absolutePath}/a.%(ext)s")
-                            .addOption("-f", "ba").addOption("--hls-prefer-native"),
+                            .addOption("-f", "ba").addOption("--hls-prefer-native").addOption("--no-playlist"),
                     ),
                 ) { p, _, line -> prog(if (p >= 0f) p.toInt() else 0, line) }
 
