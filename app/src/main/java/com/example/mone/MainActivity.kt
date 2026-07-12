@@ -43,6 +43,7 @@ class MainActivity : AppCompatActivity() {
         }
 
         Notifications.ensureChannel(this)
+        SecureCookies.migrateLegacy(this) // encrypt any pre-existing plaintext cookies once
         ensureStorageAccess()
         ensureNotificationPermission()
 
@@ -57,19 +58,34 @@ class MainActivity : AppCompatActivity() {
         findViewById<Button>(R.id.historyButton).setOnClickListener {
             startActivity(Intent(this, HistoryActivity::class.java))
         }
+        findViewById<Button>(R.id.statusButton).setOnClickListener {
+            startActivity(Intent(this, StatusActivity::class.java))
+        }
+        findViewById<Button>(R.id.queueButton).setOnClickListener {
+            startActivity(Intent(this, QueueActivity::class.java))
+        }
 
         downloadButton.setOnClickListener {
-            val url = urlInput.text.toString().trim()
-            if (url.isEmpty()) {
+            val text = urlInput.text.toString().trim()
+            if (text.isEmpty()) {
                 statusText.text = "Paste a link first."
                 return@setOnClickListener
             }
-            activeJobId = DownloadService.enqueue(this, url)
-            statusText.text = "Starting…"
-            progressBar.visibility = View.VISIBLE
-            progressBar.isIndeterminate = true
-            downloadButton.isEnabled = false
-            cancelButton.visibility = View.VISIBLE
+            val urls = Regex("""https?://\S+""").findAll(text).map { it.value }.toList()
+                .ifEmpty { listOf(text) }
+
+            if (urls.size == 1) {
+                activeJobId = DownloadService.enqueue(this, urls[0])
+                statusText.text = "Starting…"
+                progressBar.visibility = View.VISIBLE
+                progressBar.isIndeterminate = true
+                downloadButton.isEnabled = false
+                cancelButton.visibility = View.VISIBLE
+            } else {
+                urls.forEach { DownloadService.enqueue(this, it) }
+                Toast.makeText(this, "Added ${urls.size} to the queue", Toast.LENGTH_SHORT).show()
+                startActivity(Intent(this, QueueActivity::class.java))
+            }
         }
 
         cancelButton.setOnClickListener {
@@ -119,17 +135,15 @@ class MainActivity : AppCompatActivity() {
         progressBar.isIndeterminate = false
     }
 
-    private fun cookiesFile() = Downloader.cookiesFile(this)
-
     private fun refreshLoginButton() {
         loginButton.text =
-            if (cookiesFile().exists()) "Instagram: logged in ✓  (tap to log out)"
+            if (SecureCookies.exists(this)) "Instagram: logged in ✓  (tap to log out)"
             else "Log in to Instagram"
     }
 
     private fun onLoginButtonClicked() {
-        if (cookiesFile().exists()) {
-            cookiesFile().delete()
+        if (SecureCookies.exists(this)) {
+            SecureCookies.clear(this)
             CookieManager.getInstance().removeAllCookies(null)
             CookieManager.getInstance().flush()
             Toast.makeText(this, "Logged out", Toast.LENGTH_SHORT).show()

@@ -38,10 +38,13 @@ A clean, open-source Android video downloader powered by [yt-dlp](https://github
 ## ✨ Features
 
 - 🔗 **Paste & download** — reels, posts, and videos from 1000+ sites yt-dlp supports.
+- 🖇️ **Download queue** — paste multiple links at once; they process a few at a time with a live list and per-item cancel.
+- 🌆 **Image links too** — direct image URLs are fetched straight to your gallery.
 - 📲 **Share to Mone** — share a reel straight from Instagram into the app. No copy-paste.
-- 🔐 **In-app Instagram login** — sign in with your own account for login-gated reels. Your session stays in private on-device storage, never shared.
+- 🔐 **Encrypted Instagram login** — sign in with your own account for login-gated reels. Your session is encrypted at rest with a hardware-backed Android Keystore key, and never shared.
 - 🎬 **Best quality** — grabs the best single file, or downloads video + audio separately and merges them with ffmpeg.
 - 🖼️ **Saves to your gallery** — into a dedicated `Mone` folder.
+- 💬 **WhatsApp status saver** — browse statuses you've viewed and save any photo or video to your gallery in a tap.
 - 🔔 **Notifications** — live download progress, tap when done to play.
 - 🕑 **History** — everything you've downloaded, one tap to replay.
 
@@ -52,6 +55,17 @@ A clean, open-source Android video downloader powered by [yt-dlp](https://github
 3. On first launch, grant **All files access** (to save into the `Mone` folder) and **notifications**.
 
 > Sideload only — not on Google Play, by design.
+
+### 📱 Xiaomi / MIUI / HyperOS users — important
+
+MIUI aggressively freezes background apps, which can interrupt downloads. For reliable **background downloads**, give Mone these once:
+
+1. **Autostart** — Settings → Apps → **Mone** → enable **Autostart**
+   *(or Security app → Permissions → Autostart → turn on Mone).*
+2. **No battery restrictions** — Settings → Apps → **Mone** → **Battery saver** → set to **No restrictions**.
+3. **Lock in recents** — open Recents, swipe down on Mone's card (or long-press it) → tap the **lock** 🔒 so the system won't kill it.
+
+Other heavy-handed skins (Samsung One UI, Oppo/Realme ColorOS, Vivo Funtouch) have similar "Autostart" / "Allow background activity" toggles — enable them for Mone too.
 
 ## 🚀 Usage
 

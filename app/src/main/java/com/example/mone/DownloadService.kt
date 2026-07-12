@@ -5,132 +5,171 @@ import android.content.Context
 import android.content.Intent
 import android.content.pm.ServiceInfo
 import android.media.MediaScannerConnection
+import android.net.Uri
 import android.os.Build
 import android.os.IBinder
+import androidx.core.app.NotificationManagerCompat
 import androidx.core.app.ServiceCompat
 import androidx.core.content.ContextCompat
 import java.util.concurrent.ConcurrentHashMap
+import java.util.concurrent.Executors
 import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicInteger
-import kotlin.concurrent.thread
 
-/** Runs downloads as a foreground service so they survive the app being backgrounded. */
+/**
+ * Foreground service that processes a download queue: up to [MAX_CONCURRENT] run at
+ * once, the rest wait. One aggregate notification tracks the whole queue; each finished
+ * download gets its own "Saved ✓" notification. Cancel per-item or cancel-all.
+ */
 class DownloadService : Service() {
 
-    private val jobs = ConcurrentHashMap<Int, AtomicBoolean>()
-    @Volatile private var foregroundId = 0
+    private val flags = ConcurrentHashMap<Int, AtomicBoolean>() // id -> cancel flag (non-terminal jobs)
+    private val pool = Executors.newFixedThreadPool(MAX_CONCURRENT)
+    @Volatile private var isForeground = false
 
     override fun onBind(intent: Intent?): IBinder? = null
 
-    override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
+    override fun onStartCommand(intent: Intent?, flagsArg: Int, startId: Int): Int {
+        enterForeground() // satisfy the FGS contract immediately on every start
         when (intent?.action) {
-            ACTION_CANCEL -> {
-                val jobId = intent.getIntExtra(EXTRA_JOB, -1)
-                jobs[jobId]?.set(true)
-                if (jobs.isEmpty()) stopSelf()
-            }
+            ACTION_CANCEL -> flags[intent.getIntExtra(EXTRA_JOB, -1)]?.set(true)
+            ACTION_CANCEL_ALL -> flags.values.forEach { it.set(true) }
             else -> {
                 val url = intent?.getStringExtra(EXTRA_URL)
-                val jobId = intent?.getIntExtra(EXTRA_JOB, -1) ?: -1
-                if (url.isNullOrBlank() || jobId < 0) {
-                    if (jobs.isEmpty()) stopSelf()
-                    return START_NOT_STICKY
+                val id = intent?.getIntExtra(EXTRA_JOB, -1) ?: -1
+                if (!url.isNullOrBlank() && id >= 0) {
+                    val cancelled = AtomicBoolean(false)
+                    flags[id] = cancelled
+                    DownloadStore.add(DownloadStore.Task(id, url, shortTitle(url), DownloadStore.State.QUEUED, 0))
+                    pool.execute { runJob(id, url, cancelled) }
                 }
-                val cancelled = AtomicBoolean(false)
-                jobs[jobId] = cancelled
-                startForegroundFor(jobId)
-                foregroundId = jobId
-                thread { runJob(jobId, url, cancelled) }
             }
         }
+        finishIfIdle()
+        updateNotification()
         return START_NOT_STICKY
     }
 
-    private fun runJob(jobId: Int, url: String, cancelled: AtomicBoolean) {
-        val outcome = Downloader.run(applicationContext, url, cancelled) { pct, line ->
-            if (!cancelled.get()) {
-                Notifications.progress(this, jobId, pct, indeterminate = pct <= 0)
-                DownloadBus.emit(DownloadBus.Update(jobId, pct, line, DownloadBus.Phase.PROGRESS, ""))
-            }
+    private fun runJob(id: Int, url: String, cancelled: AtomicBoolean) {
+        if (cancelled.get()) {
+            DownloadStore.setState(id, DownloadStore.State.CANCELLED)
+            DownloadBus.emit(DownloadBus.Update(id, 0, "", DownloadBus.Phase.CANCELLED, "Cancelled"))
+            flags.remove(id)
+            updateNotification()
+            finishIfIdle()
+            return
         }
+        DownloadStore.setState(id, DownloadStore.State.DOWNLOADING)
+        updateNotification()
+
+        val outcome = Downloader.run(applicationContext, url, cancelled) { pct, line ->
+            DownloadStore.setProgress(id, pct)
+            DownloadBus.emit(DownloadBus.Update(id, pct, line, DownloadBus.Phase.PROGRESS, ""))
+            updateNotification()
+        }
+
         when (outcome) {
             is Outcome.Ok -> {
+                DownloadStore.setTitle(id, outcome.file.name)
+                DownloadStore.setState(id, DownloadStore.State.DONE)
                 MediaScannerConnection.scanFile(
                     applicationContext, arrayOf(outcome.file.absolutePath), null,
-                ) { _, uri ->
-                    HistoryStore.add(
-                        applicationContext,
-                        HistoryStore.Entry(outcome.file.name, System.currentTimeMillis(), uri?.toString()),
-                    )
-                    Notifications.complete(this, jobId, outcome.file.name, uri)
-                    DownloadBus.emit(
-                        DownloadBus.Update(jobId, 100, "", DownloadBus.Phase.DONE_OK, "Done ✓\nSaved to Mone folder & gallery"),
-                    )
-                    finishJob(jobId)
+                ) { _, uri: Uri? ->
+                    HistoryStore.add(applicationContext, HistoryStore.Entry(outcome.file.name, System.currentTimeMillis(), uri?.toString()))
+                    Notifications.complete(this, id, outcome.file.name, uri)
                 }
+                DownloadBus.emit(DownloadBus.Update(id, 100, "", DownloadBus.Phase.DONE_OK, "Done ✓"))
             }
             is Outcome.Err -> {
-                Notifications.failed(this, jobId, outcome.message)
-                DownloadBus.emit(DownloadBus.Update(jobId, 0, "", DownloadBus.Phase.DONE_FAIL, outcome.message))
-                finishJob(jobId)
+                DownloadStore.setState(id, DownloadStore.State.FAILED)
+                Notifications.failed(this, id, outcome.message)
+                DownloadBus.emit(DownloadBus.Update(id, 0, "", DownloadBus.Phase.DONE_FAIL, outcome.message))
             }
             Outcome.Cancelled -> {
-                Notifications.remove(this, jobId)
-                DownloadBus.emit(DownloadBus.Update(jobId, 0, "", DownloadBus.Phase.CANCELLED, "Cancelled"))
-                finishJob(jobId)
+                DownloadStore.setState(id, DownloadStore.State.CANCELLED)
+                DownloadBus.emit(DownloadBus.Update(id, 0, "", DownloadBus.Phase.CANCELLED, "Cancelled"))
             }
         }
+        flags.remove(id)
+        updateNotification()
+        finishIfIdle()
     }
 
-    private fun finishJob(jobId: Int) {
-        jobs.remove(jobId)
-        if (jobs.isEmpty()) {
-            ServiceCompat.stopForeground(this, ServiceCompat.STOP_FOREGROUND_DETACH)
-            stopSelf()
-        } else if (jobId == foregroundId) {
-            // Re-anchor the foreground to another still-running job.
-            val next = jobs.keys.firstOrNull() ?: return
-            foregroundId = next
-            startForegroundFor(next)
-        }
-    }
-
-    private fun startForegroundFor(jobId: Int) {
-        val notif = Notifications.buildProgress(this, jobId, 0, true)
+    private fun enterForeground() {
         try {
+            val notif = Notifications.buildQueue(this)
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                startForeground(jobId, notif, ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC)
+                startForeground(SERVICE_NOTIF_ID, notif, ServiceInfo.FOREGROUND_SERVICE_TYPE_DATA_SYNC)
             } else {
-                startForeground(jobId, notif)
+                startForeground(SERVICE_NOTIF_ID, notif)
             }
+            isForeground = true
         } catch (e: Throwable) {
-            // Rare OEM restriction; download still proceeds without the foreground guarantee.
+            // Rare OEM restriction; downloads still proceed.
         }
+    }
+
+    private fun updateNotification() {
+        if (isForeground) {
+            try {
+                NotificationManagerCompat.from(this).notify(SERVICE_NOTIF_ID, Notifications.buildQueue(this))
+            } catch (e: SecurityException) {
+                // POST_NOTIFICATIONS not granted — ignore.
+            }
+        }
+    }
+
+    private fun finishIfIdle() {
+        if (flags.isEmpty()) {
+            ServiceCompat.stopForeground(this, ServiceCompat.STOP_FOREGROUND_REMOVE)
+            isForeground = false
+            stopSelf()
+        }
+    }
+
+    override fun onDestroy() {
+        pool.shutdownNow()
+        super.onDestroy()
+    }
+
+    private fun shortTitle(url: String): String {
+        val host = runCatching { Uri.parse(url).host?.removePrefix("www.") }.getOrNull()
+        return host ?: url.take(40)
     }
 
     companion object {
         const val ACTION_CANCEL = "com.example.mone.CANCEL"
+        const val ACTION_CANCEL_ALL = "com.example.mone.CANCEL_ALL"
         const val EXTRA_URL = "url"
         const val EXTRA_JOB = "job"
+        private const val SERVICE_NOTIF_ID = 990001
+        private const val MAX_CONCURRENT = 2
         private val counter = AtomicInteger(1)
 
-        /** Starts a download; returns its job id so the UI can track/cancel it. */
+        /** Adds a download to the queue; returns its id. */
         fun enqueue(context: Context, url: String): Int {
-            val jobId = counter.getAndIncrement()
+            val id = counter.getAndIncrement()
             val intent = Intent(context, DownloadService::class.java).apply {
                 putExtra(EXTRA_URL, url)
-                putExtra(EXTRA_JOB, jobId)
+                putExtra(EXTRA_JOB, id)
             }
             ContextCompat.startForegroundService(context, intent)
-            return jobId
+            return id
         }
 
-        fun cancel(context: Context, jobId: Int) {
-            val intent = Intent(context, DownloadService::class.java).apply {
-                action = ACTION_CANCEL
-                putExtra(EXTRA_JOB, jobId)
-            }
-            context.startService(intent)
+        fun cancel(context: Context, id: Int) {
+            context.startService(
+                Intent(context, DownloadService::class.java).apply {
+                    action = ACTION_CANCEL
+                    putExtra(EXTRA_JOB, id)
+                },
+            )
+        }
+
+        fun cancelAll(context: Context) {
+            context.startService(
+                Intent(context, DownloadService::class.java).apply { action = ACTION_CANCEL_ALL },
+            )
         }
     }
 }

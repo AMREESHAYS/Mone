@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="utf-8"?>
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="130dp"
+    android:layout_margin="2dp"
+    android:background="#22808080">
+
+    <ImageView
+        android:id="@+id/thumb"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:scaleType="centerCrop"
+        android:contentDescription="status" />
+
+    <ImageView
+        android:id="@+id/playBadge"
+        android:layout_width="40dp"
+        android:layout_height="40dp"
+        android:layout_gravity="center"
+        android:src="@android:drawable/ic_media_play"
+        android:tint="#FFFFFFFF"
+        android:visibility="gone"
+        android:contentDescription="video" />
+
+    <ImageView
+        android:id="@+id/saveBadge"
+        android:layout_width="34dp"
+        android:layout_height="34dp"
+        android:layout_gravity="bottom|end"
+        android:layout_margin="4dp"
+        android:background="#99000000"
+        android:padding="6dp"
+        android:src="@android:drawable/stat_sys_download"
+        android:tint="#FFFFFFFF"
+        android:contentDescription="save" />
+
+</FrameLayout>

@@ -39,34 +39,32 @@ object Notifications {
         }
     }
 
-    /** Builds the ongoing progress notification (with a Cancel action) for [id]. */
-    fun buildProgress(context: Context, id: Int, percent: Int, indeterminate: Boolean): android.app.Notification {
-        val cancelIntent = Intent(context, DownloadService::class.java).apply {
-            action = DownloadService.ACTION_CANCEL
-            putExtra(DownloadService.EXTRA_JOB, id)
+    /** Aggregate ongoing notification for the whole download queue (with Cancel-all). */
+    fun buildQueue(context: Context): android.app.Notification {
+        val (active, queued, done) = DownloadStore.counts()
+        val current = DownloadStore.current()
+        val pct = current?.percent ?: 0
+        val text = when {
+            current != null -> "${current.title}  ·  $pct%"
+            queued > 0 -> "$queued queued"
+            else -> "Working…"
         }
-        val cancelPi = PendingIntent.getService(
-            context, id, cancelIntent,
+        val cancelAll = PendingIntent.getService(
+            context, 0,
+            Intent(context, DownloadService::class.java).apply { action = DownloadService.ACTION_CANCEL_ALL },
             PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
         )
         return NotificationCompat.Builder(context, CHANNEL)
             .setSmallIcon(R.drawable.ic_stat_mone)
             .setLargeIcon(appIcon(context))
-            .setContentTitle("Downloading…")
-            .setContentText(if (indeterminate) "" else "$percent%")
-            .setProgress(100, percent.coerceIn(0, 100), indeterminate)
+            .setContentTitle(if (queued + active > 1) "Downloading ${active + queued} items" else "Downloading…")
+            .setContentText(text)
+            .setSubText(if (done > 0) "$done done" else null)
+            .setProgress(100, pct.coerceIn(0, 100), current == null || pct <= 0)
             .setOngoing(true)
             .setOnlyAlertOnce(true)
-            .addAction(android.R.drawable.ic_menu_close_clear_cancel, "Cancel", cancelPi)
+            .addAction(android.R.drawable.ic_menu_close_clear_cancel, "Cancel all", cancelAll)
             .build()
-    }
-
-    fun progress(context: Context, id: Int, percent: Int, indeterminate: Boolean) {
-        notify(context, id, buildProgress(context, id, percent, indeterminate))
-    }
-
-    fun remove(context: Context, id: Int) {
-        NotificationManagerCompat.from(context).cancel(id)
     }
 
     fun complete(context: Context, id: Int, title: String, uri: Uri?) {

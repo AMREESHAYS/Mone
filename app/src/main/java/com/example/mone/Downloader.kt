@@ -9,6 +9,8 @@ import dev.ffmpegkit_maintained.ytdlp.YtDlp
 import dev.ffmpegkit_maintained.ytdlp.YtDlpRequest
 import dev.ffmpegkit_maintained.ytdlp.YtDlpResponse
 import java.io.File
+import java.net.HttpURLConnection
+import java.net.URL
 import java.util.concurrent.atomic.AtomicBoolean
 
 /** Result of a download attempt. */
@@ -30,8 +32,6 @@ object Downloader {
 
     fun downloadDir(): File = File(Environment.getExternalStorageDirectory(), "Mone")
 
-    fun cookiesFile(context: Context): File = File(context.filesDir, "cookies.txt")
-
     fun hasStorageAccess(): Boolean =
         Build.VERSION.SDK_INT < Build.VERSION_CODES.R || Environment.isExternalStorageManager()
 
@@ -45,9 +45,14 @@ object Downloader {
         if (!hasStorageAccess()) return Outcome.Err("Grant “All files access” to Mone first, then try again.")
 
         val outDir = downloadDir().apply { mkdirs() }
-        val cookies = cookiesFile(appContext)
+
+        // Direct image links: just fetch them over HTTP (yt-dlp is for video).
+        if (looksLikeImage(url)) return downloadImage(url, outDir, onProgress)
+
+        // Decrypt the saved login to a short-lived temp file (deleted in finally below).
+        val cookieFile = SecureCookies.decryptToTempFile(appContext)
         fun common(req: YtDlpRequest): YtDlpRequest {
-            if (cookies.exists()) req.addOption("--cookies", cookies.absolutePath)
+            if (cookieFile != null) req.addOption("--cookies", cookieFile.absolutePath)
             return req.addOption("--no-playlist")
                 .addOption("--retries", "3")
                 .addOption("--extractor-retries", "3")
@@ -132,6 +137,45 @@ object Downloader {
             return if (cancelled.get()) Outcome.Cancelled else Outcome.Err("Error: ${e.message}")
         } finally {
             jobDir.deleteRecursively()
+            cookieFile?.delete()
+        }
+    }
+
+    private val imageExts = listOf(".jpg", ".jpeg", ".png", ".webp", ".gif", ".bmp")
+
+    private fun looksLikeImage(url: String): Boolean {
+        val path = url.substringBefore('?').substringBefore('#').lowercase()
+        return imageExts.any { path.endsWith(it) }
+    }
+
+    private fun downloadImage(url: String, outDir: File, onProgress: (Int, String) -> Unit): Outcome {
+        return try {
+            onProgress(-1, "Downloading image…")
+            val conn = (URL(url).openConnection() as HttpURLConnection).apply {
+                instanceFollowRedirects = true
+                connectTimeout = 30000
+                readTimeout = 30000
+                setRequestProperty("User-Agent", "Mozilla/5.0 (Android) Mone")
+            }
+            conn.connect()
+            if (conn.responseCode !in 200..299) {
+                conn.disconnect()
+                return Outcome.Err("Image download failed (HTTP ${conn.responseCode}).")
+            }
+            val ext = when {
+                conn.contentType?.contains("png", true) == true -> "png"
+                conn.contentType?.contains("webp", true) == true -> "webp"
+                conn.contentType?.contains("gif", true) == true -> "gif"
+                else -> imageExts.map { it.drop(1) }.firstOrNull { url.substringBefore('?').lowercase().endsWith(it) } ?: "jpg"
+            }
+            var dest = File(outDir, "image_${System.currentTimeMillis()}.$ext")
+            var i = 1
+            while (dest.exists()) { dest = File(outDir, "image_${System.currentTimeMillis()}_$i.$ext"); i++ }
+            conn.inputStream.use { input -> dest.outputStream().use { input.copyTo(it) } }
+            conn.disconnect()
+            if (dest.length() > 0) Outcome.Ok(dest) else { dest.delete(); Outcome.Err("Image download failed.") }
+        } catch (e: Exception) {
+            Outcome.Err("Image download failed: ${e.message}")
         }
     }
 

@@ -25,6 +25,20 @@
             android:text="Log in to Instagram" />
 
         <Button
+            android:id="@+id/statusButton"
+            style="?attr/materialButtonOutlinedStyle"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="WhatsApp status saver" />
+
+        <Button
+            android:id="@+id/queueButton"
+            style="?attr/materialButtonOutlinedStyle"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Downloads / queue" />
+
+        <Button
             android:id="@+id/historyButton"
             style="?attr/materialButtonOutlinedStyle"
             android:layout_width="match_parent"
@@ -43,8 +57,10 @@
             android:id="@+id/urlInput"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:hint="https://www.instagram.com/reel/..."
-            android:inputType="textUri"
+            android:hint="Paste one or more links (one per line)"
+            android:inputType="textMultiLine"
+            android:minLines="1"
+            android:maxLines="5"
             android:autofillHints="" />
 
         <Button
