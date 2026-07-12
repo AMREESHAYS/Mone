@@ -41,7 +41,7 @@ A clean, open-source Android video downloader powered by [yt-dlp](https://github
 - 🖇️ **Download queue** — paste multiple links at once; they process a few at a time with a live list and per-item cancel.
 - 🌆 **Image links too** — direct image URLs are fetched straight to your gallery.
 - 📲 **Share to Mone** — share a reel straight from Instagram into the app. No copy-paste.
-- 🔐 **Encrypted Instagram login** — sign in with your own account for login-gated reels. Your session is encrypted at rest with a hardware-backed Android Keystore key, and never shared.
+- 🔐 **In-app Instagram login** — sign in with your own account for login-gated reels. Your session is kept in the app's private internal storage (not readable by other apps) and never shared.
 - 🎬 **Best quality** — grabs the best single file, or downloads video + audio separately and merges them with ffmpeg.
 - 🖼️ **Saves to your gallery** — into a dedicated `Mone` folder.
 - 💬 **WhatsApp status saver** — browse statuses you've viewed and save any photo or video to your gallery in a tap.

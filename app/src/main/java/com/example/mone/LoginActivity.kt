@@ -72,7 +72,7 @@ class LoginActivity : AppCompatActivity() {
             }
         }
         return try {
-            SecureCookies.save(this, sb.toString())
+            Downloader.cookiesFile(this).writeText(sb.toString())
             true
         } catch (e: Exception) {
             false

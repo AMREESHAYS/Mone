@@ -43,7 +43,6 @@ class MainActivity : AppCompatActivity() {
         }
 
         Notifications.ensureChannel(this)
-        SecureCookies.migrateLegacy(this) // encrypt any pre-existing plaintext cookies once
         ensureStorageAccess()
         ensureNotificationPermission()
 
@@ -137,13 +136,13 @@ class MainActivity : AppCompatActivity() {
 
     private fun refreshLoginButton() {
         loginButton.text =
-            if (SecureCookies.exists(this)) "Instagram: logged in ✓  (tap to log out)"
+            if (Downloader.cookiesFile(this).exists()) "Instagram: logged in ✓  (tap to log out)"
             else "Log in to Instagram"
     }
 
     private fun onLoginButtonClicked() {
-        if (SecureCookies.exists(this)) {
-            SecureCookies.clear(this)
+        if (Downloader.cookiesFile(this).exists()) {
+            Downloader.cookiesFile(this).delete()
             CookieManager.getInstance().removeAllCookies(null)
             CookieManager.getInstance().flush()
             Toast.makeText(this, "Logged out", Toast.LENGTH_SHORT).show()

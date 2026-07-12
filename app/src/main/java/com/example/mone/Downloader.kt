@@ -32,6 +32,9 @@ object Downloader {
 
     fun downloadDir(): File = File(Environment.getExternalStorageDirectory(), "Mone")
 
+    /** Cookies stored in internal (app-private) storage — not readable by other apps. */
+    fun cookiesFile(context: Context): File = File(context.filesDir, "cookies.txt")
+
     fun hasStorageAccess(): Boolean =
         Build.VERSION.SDK_INT < Build.VERSION_CODES.R || Environment.isExternalStorageManager()
 
@@ -49,10 +52,9 @@ object Downloader {
         // Direct image links: just fetch them over HTTP (yt-dlp is for video).
         if (looksLikeImage(url)) return downloadImage(url, outDir, onProgress)
 
-        // Decrypt the saved login to a short-lived temp file (deleted in finally below).
-        val cookieFile = SecureCookies.decryptToTempFile(appContext)
+        val cookies = cookiesFile(appContext)
         fun common(req: YtDlpRequest): YtDlpRequest {
-            if (cookieFile != null) req.addOption("--cookies", cookieFile.absolutePath)
+            if (cookies.exists()) req.addOption("--cookies", cookies.absolutePath)
             return req.addOption("--no-playlist")
                 .addOption("--retries", "3")
                 .addOption("--extractor-retries", "3")
@@ -137,7 +139,6 @@ object Downloader {
             return if (cancelled.get()) Outcome.Cancelled else Outcome.Err("Error: ${e.message}")
         } finally {
             jobDir.deleteRecursively()
-            cookieFile?.delete()
         }
     }
 
