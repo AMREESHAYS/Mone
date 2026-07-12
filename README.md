@@ -104,6 +104,17 @@ Mone is a thin Kotlin front-end. The heavy lifting is done by:
 - yt-dlp is bundled at a fixed version; sites change often, so an extractor can break until the library updates.
 - Built on a young third-party library — treat as experimental.
 
+## ❓ FAQ
+
+**Why won't it install on my phone? (`INSTALL_FAILED_NO_MATCHING_ABIS`)**
+Your phone is **32-bit (`armeabi-v7a`)** and Mone requires a **64-bit (`arm64-v8a`)** device. This isn't a packaging choice we can toggle: the download engine is a bundled **Python + yt-dlp + ffmpeg**, and those libraries only publish **64-bit** binaries — there are no 32-bit versions to include. Forcing the install wouldn't help either, since 64-bit code can't run on a 32-bit system. Nearly every phone since ~2017 is 64-bit; only some very old/low-end models are affected. Use a 64-bit phone, or download on a PC.
+
+**Why does YouTube sometimes fail when Instagram/Pinterest work?**
+YouTube is the hardest target: it rate-limits automated requests (HTTP 429), demands a "confirm you're not a bot" login, and needs a JavaScript runtime to solve its signature challenge — which this on-device engine doesn't have. It may work intermittently, but it's unreliable by nature. Instagram, Pinterest, X and most sites are solid.
+
+**Do I have to log in to Instagram?**
+Only for login-gated reels. Instagram serves nothing to anonymous requests for those, so you sign in with **your own** account once; the session stays in the app's private storage on your device and is never shared.
+
 ## 🤝 Contributing
 
 Issues and pull requests are welcome. Fork it, branch, and open a PR.
