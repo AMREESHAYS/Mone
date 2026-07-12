@@ -50,6 +50,9 @@ A clean, open-source Android video downloader powered by [yt-dlp](https://github
 
 ## 📥 Install
 
+> [!IMPORTANT]
+> **Requires a 64-bit Android phone** (`arm64-v8a`) running **Android 7.0+**. The download engine (embedded Python + yt-dlp + ffmpeg) ships 64-bit binaries only, so Mone **cannot install on 32-bit-only devices** (`armeabi-v7a`) — you'll get `INSTALL_FAILED_NO_MATCHING_ABIS`. Practically every phone since ~2017 is 64-bit; only some very low-end/old models are affected.
+
 1. Download the latest **`Mone-vX.Y.Z.apk`** from the [**Releases**](https://github.com/AMREESHAYS/Mone/releases/latest) page.
 2. Open it on your Android phone and allow **install from unknown sources**.
 3. On first launch, grant **All files access** (to save into the `Mone` folder) and **notifications**.
