@@ -43,21 +43,9 @@ class ShareActivity : AppCompatActivity() {
         dialog.setOnShowListener {
             dialog.getButton(AlertDialog.BUTTON_NEGATIVE).setOnClickListener { finish() }
             dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
-                // Dismiss immediately; download continues in the background and toasts when done.
-                val app = applicationContext
-                Toast.makeText(app, "Downloading…", Toast.LENGTH_SHORT).show()
-                Downloader.download(
-                    app,
-                    url,
-                    onProgress = { _, _ -> },
-                    onResult = { success, message ->
-                        Toast.makeText(
-                            app,
-                            if (success) "Saved to Mone ✓" else message,
-                            Toast.LENGTH_LONG,
-                        ).show()
-                    },
-                )
+                // Hand off to the foreground service; progress + cancel live in the notification.
+                Toast.makeText(applicationContext, "Downloading…", Toast.LENGTH_SHORT).show()
+                DownloadService.enqueue(this, url)
                 dialog.dismiss()
                 finish()
             }

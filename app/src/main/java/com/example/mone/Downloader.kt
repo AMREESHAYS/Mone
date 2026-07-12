@@ -1,77 +1,61 @@
 package com.example.mone
 
 import android.content.Context
-import android.media.MediaScannerConnection
 import android.os.Build
 import android.os.Environment
-import android.os.Handler
-import android.os.Looper
 import com.arthenica.ffmpegkit.FFmpegKit
 import com.arthenica.ffmpegkit.ReturnCode
 import dev.ffmpegkit_maintained.ytdlp.YtDlp
 import dev.ffmpegkit_maintained.ytdlp.YtDlpRequest
+import dev.ffmpegkit_maintained.ytdlp.YtDlpResponse
 import java.io.File
-import kotlin.concurrent.thread
+import java.util.concurrent.atomic.AtomicBoolean
 
-/** Shared download logic used by both the main screen and the share popup. */
+/** Result of a download attempt. */
+sealed class Outcome {
+    data class Ok(val file: File) : Outcome()
+    data class Err(val message: String) : Outcome()
+    object Cancelled : Outcome()
+}
+
+/**
+ * Pure download logic (no UI, no notifications) — runs SYNCHRONOUSLY on the caller's
+ * thread and returns an [Outcome]. Notifications, history and gallery-scan are the
+ * caller's job (see DownloadService). Cancellation is cooperative: [cancelled] is
+ * polled between steps and cancels the underlying Future. The library has no hard
+ * process-kill, so an in-flight transfer may run to completion in the background,
+ * but its files are deleted and never published.
+ */
 object Downloader {
-    private val main = Handler(Looper.getMainLooper())
 
-    /** Public, file-manager-visible folder all downloads go into: /sdcard/Mone. */
     fun downloadDir(): File = File(Environment.getExternalStorageDirectory(), "Mone")
 
-    /** Cookies live in INTERNAL storage — they are a full login session, never on shared storage. */
     fun cookiesFile(context: Context): File = File(context.filesDir, "cookies.txt")
 
-    /** True when we can write to the public Mone folder. */
     fun hasStorageAccess(): Boolean =
         Build.VERSION.SDK_INT < Build.VERSION_CODES.R || Environment.isExternalStorageManager()
 
-    /**
-     * Downloads [url] into the public Mone folder in best quality, then makes it
-     * visible in the gallery. Both callbacks are invoked on the main thread.
-     *
-     * Strategy: try a best single-file stream first (fast, covers reels & direct mp4).
-     * If a site only offers separate video+audio (e.g. Pinterest/HLS), download each
-     * and mux them with ffmpeg-kit — the library has no ffmpeg CLI for yt-dlp to use.
-     *
-     * Each call uses its own private temp dir, so concurrent downloads never collide.
-     */
-    fun download(
+    fun run(
         context: Context,
         url: String,
+        cancelled: AtomicBoolean,
         onProgress: (percent: Int, line: String) -> Unit,
-        onResult: (success: Boolean, message: String) -> Unit,
-    ) {
+    ): Outcome {
         val appContext = context.applicationContext
-        if (!hasStorageAccess()) {
-            onResult(false, "Grant “All files access” to Mone first, then try again.")
-            return
-        }
+        if (!hasStorageAccess()) return Outcome.Err("Grant “All files access” to Mone first, then try again.")
+
         val outDir = downloadDir().apply { mkdirs() }
         val cookies = cookiesFile(appContext)
-        // Common options: cookies, single-video, and auto-retry transient network/DNS blips.
         fun common(req: YtDlpRequest): YtDlpRequest {
             if (cookies.exists()) req.addOption("--cookies", cookies.absolutePath)
-            return req
-                .addOption("--no-playlist")
+            return req.addOption("--no-playlist")
                 .addOption("--retries", "3")
                 .addOption("--extractor-retries", "3")
                 .addOption("--socket-timeout", "30")
         }
 
-        val notifId = (System.currentTimeMillis() and 0xFFFFFF).toInt()
-        // Per-job temp dir on the SAME volume as outDir, so publishing is an instant rename.
-        val jobDir = File(outDir, ".mone_job_$notifId").apply { mkdirs() }
-        Notifications.progress(appContext, notifId, 0, indeterminate = true)
+        val jobDir = File(outDir, ".mone_job_${System.currentTimeMillis()}").apply { mkdirs() }
 
-        val prog: (Int, String) -> Unit = { pct, line ->
-            Notifications.progress(appContext, notifId, pct, indeterminate = pct <= 0)
-            main.post { onProgress(pct, line) }
-        }
-
-        // Move a finished file out of the private job dir into the public Mone folder,
-        // giving it a unique name so a same-titled earlier download is never clobbered.
         fun publish(file: File): File {
             var dest = File(outDir, file.name)
             var i = 1
@@ -83,99 +67,114 @@ object Downloader {
             return dest
         }
 
-        fun succeed(file: File) {
-            val dest = publish(file)
-            MediaScannerConnection.scanFile(appContext, arrayOf(dest.absolutePath), null) { _, uri ->
-                HistoryStore.add(appContext, HistoryStore.Entry(dest.name, System.currentTimeMillis(), uri?.toString()))
-                Notifications.complete(appContext, notifId, dest.name, uri)
-            }
-            main.post { onResult(true, "Done ✓\nSaved to Mone folder & gallery") }
-        }
+        try {
+            YtDlp.init(appContext)
+            if (cancelled.get()) return Outcome.Cancelled
 
-        // Turn raw yt-dlp errors into something a person can act on.
-        fun humanize(raw: String): String = when {
-            raw.contains("No address associated", true) ||
-                raw.contains("getaddrinfo", true) ||
-                raw.contains("Errno 7", true) ||
-                raw.contains("Temporary failure in name resolution", true) ||
-                raw.contains("Unable to download webpage", true) ->
-                "Network error — check your connection and try again."
-            raw.contains("Requested format is not available", true) ->
-                "Couldn't find a downloadable video at that link."
-            raw.contains("login", true) || raw.contains("empty media response", true) ->
-                "This post needs you to be logged in. Tap “Log in to Instagram”."
-            else -> "Failed:\n${raw.take(300)}"
-        }
-
-        fun fail(message: String) {
-            Notifications.failed(appContext, notifId, message)
-            main.post { onResult(false, message) }
-        }
-
-        thread {
-            try {
-                YtDlp.init(appContext)
-
-                // 1) Best single file that already has audio+video — no merge needed.
-                val single = common(
+            // 1) Best single file (already has audio+video) — no merge needed.
+            val r1 = runYtdlp(
+                common(
                     YtDlpRequest(url)
                         .setOutputTemplate("${jobDir.absolutePath}/%(title).80s.%(ext)s")
                         .addOption("-f", "b"),
-                )
-                val r1 = try {
-                    YtDlp.execute(single) { p, _, line -> prog(if (p >= 0f) p.toInt() else 0, line) }
-                } catch (e: Exception) {
-                    null
-                }
-                if (r1?.isSuccess == true) {
-                    val file = jobDir.listFiles()?.maxByOrNull { it.lastModified() }
-                    if (file != null) succeed(file) else fail("Downloaded, but file not found.")
-                    return@thread
-                }
-
-                // 2) No single file (separate streams). Download video + audio, then mux.
-                main.post { onProgress(0, "Fetching video…") }
-                val rv = YtDlp.execute(
-                    common(
-                        YtDlpRequest(url)
-                            .setOutputTemplate("${jobDir.absolutePath}/v.%(ext)s")
-                            .addOption("-f", "bv*").addOption("--hls-prefer-native"),
-                    ),
-                ) { p, _, line -> prog(if (p >= 0f) p.toInt() else 0, line) }
-
-                main.post { onProgress(0, "Fetching audio…") }
-                val ra = YtDlp.execute(
-                    common(
-                        YtDlpRequest(url)
-                            .setOutputTemplate("${jobDir.absolutePath}/a.%(ext)s")
-                            .addOption("-f", "ba").addOption("--hls-prefer-native"),
-                    ),
-                ) { p, _, line -> prog(if (p >= 0f) p.toInt() else 0, line) }
-
-                val vFile = jobDir.listFiles { f -> f.name.startsWith("v.") }?.firstOrNull()
-                val aFile = jobDir.listFiles { f -> f.name.startsWith("a.") }?.firstOrNull()
-                if (!rv.isSuccess || !ra.isSuccess || vFile == null || aFile == null) {
-                    val why = rv.errorOutput.ifBlank { ra.errorOutput }.ifBlank { r1?.errorOutput.orEmpty() }
-                    fail(humanize(why))
-                    return@thread
-                }
-
-                // 3) Mux with ffmpeg-kit (stream copy — no re-encode, fast).
-                main.post { onProgress(-1, "Merging video + audio…") }
-                val out = File(jobDir, "mone_${System.currentTimeMillis()}.mp4")
-                val session = FFmpegKit.execute(
-                    "-y -i ${vFile.absolutePath} -i ${aFile.absolutePath} -c copy ${out.absolutePath}",
-                )
-                if (ReturnCode.isSuccess(session.returnCode) && out.exists()) {
-                    succeed(out)
-                } else {
-                    fail("Merge failed. Try again or a different link.")
-                }
-            } catch (e: Exception) {
-                fail("Error: ${e.message}")
-            } finally {
-                jobDir.deleteRecursively()
+                ),
+                cancelled, onProgress,
+            )
+            if (cancelled.get()) return Outcome.Cancelled
+            if (r1?.isSuccess == true) {
+                val file = jobDir.listFiles()?.maxByOrNull { it.lastModified() }
+                    ?: return Outcome.Err("Downloaded, but file not found.")
+                return Outcome.Ok(publish(file))
             }
+
+            // 2) Separate streams (Pinterest/HLS) — download video + audio, then mux.
+            onProgress(0, "Fetching video…")
+            val rv = runYtdlp(
+                common(
+                    YtDlpRequest(url).setOutputTemplate("${jobDir.absolutePath}/v.%(ext)s")
+                        .addOption("-f", "bv*").addOption("--hls-prefer-native"),
+                ),
+                cancelled, onProgress,
+            )
+            if (cancelled.get()) return Outcome.Cancelled
+
+            onProgress(0, "Fetching audio…")
+            val ra = runYtdlp(
+                common(
+                    YtDlpRequest(url).setOutputTemplate("${jobDir.absolutePath}/a.%(ext)s")
+                        .addOption("-f", "ba").addOption("--hls-prefer-native"),
+                ),
+                cancelled, onProgress,
+            )
+            if (cancelled.get()) return Outcome.Cancelled
+
+            val vFile = jobDir.listFiles { f -> f.name.startsWith("v.") }?.firstOrNull()
+            val aFile = jobDir.listFiles { f -> f.name.startsWith("a.") }?.firstOrNull()
+            if (rv?.isSuccess != true || ra?.isSuccess != true || vFile == null || aFile == null) {
+                val raw = (rv?.errorOutput.orEmpty()).ifBlank { ra?.errorOutput.orEmpty() }
+                    .ifBlank { r1?.errorOutput.orEmpty() }
+                return Outcome.Err(humanize(raw))
+            }
+
+            // 3) Mux with ffmpeg-kit (stream copy — no re-encode).
+            onProgress(-1, "Merging video + audio…")
+            if (cancelled.get()) return Outcome.Cancelled
+            val out = File(jobDir, "mone_${System.currentTimeMillis()}.mp4")
+            val session = FFmpegKit.execute(
+                "-y -i ${vFile.absolutePath} -i ${aFile.absolutePath} -c copy ${out.absolutePath}",
+            )
+            return if (ReturnCode.isSuccess(session.returnCode) && out.exists()) {
+                Outcome.Ok(publish(out))
+            } else {
+                Outcome.Err("Merge failed. Try again or a different link.")
+            }
+        } catch (e: Exception) {
+            return if (cancelled.get()) Outcome.Cancelled else Outcome.Err("Error: ${e.message}")
+        } finally {
+            jobDir.deleteRecursively()
         }
+    }
+
+    /** Runs one yt-dlp request, polling [cancelled] so a cancel cancels the Future. */
+    private fun runYtdlp(
+        request: YtDlpRequest,
+        cancelled: AtomicBoolean,
+        onProgress: (Int, String) -> Unit,
+    ): YtDlpResponse? {
+        return try {
+            val future = YtDlp.executeAsync(request) { p, _, line ->
+                onProgress(if (p >= 0f) p.toInt() else 0, line)
+            }
+            while (!future.isDone) {
+                if (cancelled.get()) {
+                    future.cancel(true)
+                    return null
+                }
+                Thread.sleep(150)
+            }
+            future.get()
+        } catch (e: Exception) {
+            null
+        }
+    }
+
+    /** Turn raw yt-dlp errors into something a person can act on. */
+    private fun humanize(raw: String): String = when {
+        raw.contains("No address associated", true) ||
+            raw.contains("getaddrinfo", true) ||
+            raw.contains("Errno 7", true) ||
+            raw.contains("Temporary failure in name resolution", true) ||
+            raw.contains("Unable to download webpage", true) ->
+            "Network error — check your connection and try again."
+        raw.contains("Requested format is not available", true) ->
+            "Couldn't find a downloadable video at that link."
+        raw.contains("not a bot", true) ||
+            raw.contains("Too Many Requests", true) ||
+            raw.contains("HTTP Error 429", true) ->
+            "This site is rate-limiting or blocking automated downloads right now. Try again later."
+        raw.contains("empty media response", true) ||
+            (raw.contains("login", true) && raw.contains("instagram", true)) ->
+            "This post needs you to be logged in. Tap “Log in to Instagram”."
+        else -> "Failed:\n${raw.take(300)}"
     }
 }

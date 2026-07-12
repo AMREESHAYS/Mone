@@ -7,9 +7,9 @@ import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.provider.Settings
+import android.view.View
 import android.webkit.CookieManager
 import android.widget.Button
-import androidx.core.content.ContextCompat
 import android.widget.EditText
 import android.widget.ProgressBar
 import android.widget.TextView
@@ -17,13 +17,20 @@ import android.widget.Toast
 import androidx.activity.enableEdgeToEdge
 import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.content.ContextCompat
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
-import java.io.File
 
 class MainActivity : AppCompatActivity() {
 
     private lateinit var loginButton: Button
+    private lateinit var downloadButton: Button
+    private lateinit var cancelButton: Button
+    private lateinit var progressBar: ProgressBar
+    private lateinit var statusText: TextView
+
+    private var activeJobId = -1
+    private val busListener: (DownloadBus.Update) -> Unit = { onDownloadUpdate(it) }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -40,9 +47,10 @@ class MainActivity : AppCompatActivity() {
         ensureNotificationPermission()
 
         val urlInput = findViewById<EditText>(R.id.urlInput)
-        val downloadButton = findViewById<Button>(R.id.downloadButton)
-        val progressBar = findViewById<ProgressBar>(R.id.progressBar)
-        val statusText = findViewById<TextView>(R.id.statusText)
+        downloadButton = findViewById(R.id.downloadButton)
+        cancelButton = findViewById(R.id.cancelButton)
+        progressBar = findViewById(R.id.progressBar)
+        statusText = findViewById(R.id.statusText)
         loginButton = findViewById(R.id.loginButton)
 
         loginButton.setOnClickListener { onLoginButtonClicked() }
@@ -56,30 +64,59 @@ class MainActivity : AppCompatActivity() {
                 statusText.text = "Paste a link first."
                 return@setOnClickListener
             }
-            downloadButton.isEnabled = false
-            progressBar.visibility = ProgressBar.VISIBLE
-            progressBar.progress = 0
+            activeJobId = DownloadService.enqueue(this, url)
             statusText.text = "Starting…"
-
-            Downloader.download(
-                this,
-                url,
-                onProgress = { pct, line ->
-                    progressBar.progress = pct
-                    statusText.text = line
-                },
-                onResult = { _, message ->
-                    statusText.text = message
-                    downloadButton.isEnabled = true
-                    progressBar.visibility = ProgressBar.GONE
-                },
-            )
+            progressBar.visibility = View.VISIBLE
+            progressBar.isIndeterminate = true
+            downloadButton.isEnabled = false
+            cancelButton.visibility = View.VISIBLE
         }
+
+        cancelButton.setOnClickListener {
+            if (activeJobId >= 0) DownloadService.cancel(this, activeJobId)
+        }
+    }
+
+    override fun onStart() {
+        super.onStart()
+        DownloadBus.addListener(busListener)
+    }
+
+    override fun onStop() {
+        super.onStop()
+        DownloadBus.removeListener(busListener)
     }
 
     override fun onResume() {
         super.onResume()
         refreshLoginButton()
+    }
+
+    private fun onDownloadUpdate(u: DownloadBus.Update) {
+        if (u.jobId != activeJobId) return
+        when (u.phase) {
+            DownloadBus.Phase.PROGRESS -> {
+                if (u.percent > 0) {
+                    progressBar.isIndeterminate = false
+                    progressBar.progress = u.percent
+                } else {
+                    progressBar.isIndeterminate = true
+                }
+                statusText.text = u.line
+            }
+            else -> {
+                statusText.text = u.message
+                activeJobId = -1
+                resetIdle()
+            }
+        }
+    }
+
+    private fun resetIdle() {
+        downloadButton.isEnabled = true
+        cancelButton.visibility = View.GONE
+        progressBar.visibility = View.GONE
+        progressBar.isIndeterminate = false
     }
 
     private fun cookiesFile() = Downloader.cookiesFile(this)

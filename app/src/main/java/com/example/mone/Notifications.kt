@@ -39,8 +39,17 @@ object Notifications {
         }
     }
 
-    fun progress(context: Context, id: Int, percent: Int, indeterminate: Boolean) {
-        val n = NotificationCompat.Builder(context, CHANNEL)
+    /** Builds the ongoing progress notification (with a Cancel action) for [id]. */
+    fun buildProgress(context: Context, id: Int, percent: Int, indeterminate: Boolean): android.app.Notification {
+        val cancelIntent = Intent(context, DownloadService::class.java).apply {
+            action = DownloadService.ACTION_CANCEL
+            putExtra(DownloadService.EXTRA_JOB, id)
+        }
+        val cancelPi = PendingIntent.getService(
+            context, id, cancelIntent,
+            PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT,
+        )
+        return NotificationCompat.Builder(context, CHANNEL)
             .setSmallIcon(R.drawable.ic_stat_mone)
             .setLargeIcon(appIcon(context))
             .setContentTitle("Downloading…")
@@ -48,8 +57,16 @@ object Notifications {
             .setProgress(100, percent.coerceIn(0, 100), indeterminate)
             .setOngoing(true)
             .setOnlyAlertOnce(true)
+            .addAction(android.R.drawable.ic_menu_close_clear_cancel, "Cancel", cancelPi)
             .build()
-        notify(context, id, n)
+    }
+
+    fun progress(context: Context, id: Int, percent: Int, indeterminate: Boolean) {
+        notify(context, id, buildProgress(context, id, percent, indeterminate))
+    }
+
+    fun remove(context: Context, id: Int) {
+        NotificationManagerCompat.from(context).cancel(id)
     }
 
     fun complete(context: Context, id: Int, title: String, uri: Uri?) {
