@@ -37,11 +37,16 @@ class DownloadService : Service() {
             else -> {
                 val url = intent?.getStringExtra(EXTRA_URL)
                 val id = intent?.getIntExtra(EXTRA_JOB, -1) ?: -1
+                val format = runCatching {
+                    DownloadFormat.valueOf(intent?.getStringExtra(EXTRA_FORMAT) ?: "BEST")
+                }.getOrDefault(DownloadFormat.BEST)
+                val trimStart = intent?.getIntExtra(EXTRA_TRIM_START, -1) ?: -1
+                val trimEnd = intent?.getIntExtra(EXTRA_TRIM_END, -1) ?: -1
                 if (!url.isNullOrBlank() && id >= 0) {
                     val cancelled = AtomicBoolean(false)
                     flags[id] = cancelled
-                    DownloadStore.add(DownloadStore.Task(id, url, shortTitle(url), DownloadStore.State.QUEUED, 0))
-                    pool.execute { runJob(id, url, cancelled) }
+                    DownloadStore.add(DownloadStore.Task(id, url, shortTitle(url), DownloadStore.State.QUEUED, 0, format.label))
+                    pool.execute { runJob(id, url, format, trimStart, trimEnd, cancelled) }
                 }
             }
         }
@@ -50,7 +55,7 @@ class DownloadService : Service() {
         return START_NOT_STICKY
     }
 
-    private fun runJob(id: Int, url: String, cancelled: AtomicBoolean) {
+    private fun runJob(id: Int, url: String, format: DownloadFormat, trimStart: Int, trimEnd: Int, cancelled: AtomicBoolean) {
         if (cancelled.get()) {
             DownloadStore.setState(id, DownloadStore.State.CANCELLED)
             DownloadBus.emit(DownloadBus.Update(id, 0, "", DownloadBus.Phase.CANCELLED, "Cancelled"))
@@ -62,11 +67,15 @@ class DownloadService : Service() {
         DownloadStore.setState(id, DownloadStore.State.DOWNLOADING)
         updateNotification()
 
-        val outcome = Downloader.run(applicationContext, url, cancelled) { pct, line ->
-            DownloadStore.setProgress(id, pct)
-            DownloadBus.emit(DownloadBus.Update(id, pct, line, DownloadBus.Phase.PROGRESS, ""))
-            updateNotification()
-        }
+        val outcome = Downloader.run(
+            applicationContext, url, format, cancelled,
+            onProgress = { pct, line ->
+                DownloadStore.setProgress(id, pct)
+                DownloadBus.emit(DownloadBus.Update(id, pct, line, DownloadBus.Phase.PROGRESS, ""))
+                updateNotification()
+            },
+            trimStartSec = trimStart, trimEndSec = trimEnd,
+        )
 
         when (outcome) {
             is Outcome.Ok -> {
@@ -142,16 +151,28 @@ class DownloadService : Service() {
         const val ACTION_CANCEL_ALL = "com.example.mone.CANCEL_ALL"
         const val EXTRA_URL = "url"
         const val EXTRA_JOB = "job"
+        const val EXTRA_FORMAT = "format"
+        const val EXTRA_TRIM_START = "trim_start"
+        const val EXTRA_TRIM_END = "trim_end"
         private const val SERVICE_NOTIF_ID = 990001
         private const val MAX_CONCURRENT = 2
         private val counter = AtomicInteger(1)
 
-        /** Adds a download to the queue; returns its id. */
-        fun enqueue(context: Context, url: String): Int {
+        /** Adds a download to the queue; returns its id. Trim seconds default to -1 (no trim). */
+        fun enqueue(
+            context: Context,
+            url: String,
+            format: DownloadFormat = DownloadFormat.BEST,
+            trimStart: Int = -1,
+            trimEnd: Int = -1,
+        ): Int {
             val id = counter.getAndIncrement()
             val intent = Intent(context, DownloadService::class.java).apply {
                 putExtra(EXTRA_URL, url)
                 putExtra(EXTRA_JOB, id)
+                putExtra(EXTRA_FORMAT, format.name)
+                putExtra(EXTRA_TRIM_START, trimStart)
+                putExtra(EXTRA_TRIM_END, trimEnd)
             }
             ContextCompat.startForegroundService(context, intent)
             return id

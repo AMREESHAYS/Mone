@@ -20,6 +20,32 @@ sealed class Outcome {
     object Cancelled : Outcome()
 }
 
+/** What the user chose to download. */
+enum class DownloadFormat(val label: String) {
+    BEST("Best video"),
+    P1080("1080p"),
+    P720("720p"),
+    AUDIO("Audio (M4A)");
+
+    /** yt-dlp single-file selector (video modes). */
+    val single: String
+        get() = when (this) {
+            BEST -> "b"
+            P1080 -> "b[height<=1080]"
+            P720 -> "b[height<=720]"
+            AUDIO -> "ba/bestaudio/best"
+        }
+
+    /** yt-dlp video-only selector for the separate-streams path. */
+    val video: String
+        get() = when (this) {
+            BEST -> "bv*"
+            P1080 -> "bv*[height<=1080]"
+            P720 -> "bv*[height<=720]"
+            AUDIO -> "bv*"
+        }
+}
+
 /**
  * Pure download logic (no UI, no notifications) — runs SYNCHRONOUSLY on the caller's
  * thread and returns an [Outcome]. Notifications, history and gallery-scan are the
@@ -41,8 +67,11 @@ object Downloader {
     fun run(
         context: Context,
         url: String,
+        format: DownloadFormat,
         cancelled: AtomicBoolean,
         onProgress: (percent: Int, line: String) -> Unit,
+        trimStartSec: Int = -1,
+        trimEndSec: Int = -1,
     ): Outcome {
         val appContext = context.applicationContext
         if (!hasStorageAccess()) return Outcome.Err("Grant “All files access” to Mone first, then try again.")
@@ -50,7 +79,7 @@ object Downloader {
         val outDir = downloadDir().apply { mkdirs() }
 
         // Direct image links: just fetch them over HTTP (yt-dlp is for video).
-        if (looksLikeImage(url)) return downloadImage(url, outDir, onProgress)
+        if (looksLikeImage(url) && format != DownloadFormat.AUDIO) return downloadImage(url, outDir, onProgress)
 
         val cookies = cookiesFile(appContext)
         fun common(req: YtDlpRequest): YtDlpRequest {
@@ -62,6 +91,22 @@ object Downloader {
         }
 
         val jobDir = File(outDir, ".mone_job_${System.currentTimeMillis()}").apply { mkdirs() }
+
+        // Cut the given file to [trimStartSec, trimEndSec] with a stream-copy (no re-encode).
+        fun trimmed(file: File): File {
+            if (trimStartSec < 0 && trimEndSec < 0) return file
+            onProgress(-1, "Trimming clip…")
+            val start = if (trimStartSec > 0) trimStartSec else 0
+            val out = File(jobDir, "clip_${System.currentTimeMillis()}.${file.extension}")
+            // Argument array (not a parsed string) so paths with spaces/special chars are safe.
+            val args = mutableListOf("-y")
+            if (start > 0) { args.add("-ss"); args.add(start.toString()) }
+            args.add("-i"); args.add(file.absolutePath)
+            if (trimEndSec > start) { args.add("-t"); args.add((trimEndSec - start).toString()) }
+            args.add("-c"); args.add("copy"); args.add(out.absolutePath)
+            val session = FFmpegKit.executeWithArguments(args.toTypedArray())
+            return if (ReturnCode.isSuccess(session.returnCode) && out.exists() && out.length() > 0) out else file
+        }
 
         fun publish(file: File): File {
             var dest = File(outDir, file.name)
@@ -78,12 +123,44 @@ object Downloader {
             YtDlp.init(appContext)
             if (cancelled.get()) return Outcome.Cancelled
 
+            // Audio-only: prefer an m4a stream directly (no transcode). If the source only
+            // offers Opus/webm, transcode to m4a (AAC) — the free ffmpeg has that encoder.
+            if (format == DownloadFormat.AUDIO) {
+                onProgress(0, "Fetching audio…")
+                val ra = runYtdlp(
+                    common(
+                        YtDlpRequest(url).setOutputTemplate("${jobDir.absolutePath}/a.%(ext)s")
+                            .addOption("-f", "ba[ext=m4a]/ba/bestaudio/best").addOption("--hls-prefer-native"),
+                    ),
+                    cancelled, onProgress,
+                )
+                if (cancelled.get()) return Outcome.Cancelled
+                val aFile = jobDir.listFiles { f -> f.name.startsWith("a.") }?.firstOrNull()
+                if (ra?.isSuccess != true || aFile == null) {
+                    return Outcome.Err(humanize(ra?.errorOutput.orEmpty()))
+                }
+                // Already m4a/mp4 (AAC) → publish as-is, no re-encode.
+                if (aFile.extension.lowercase() in setOf("m4a", "mp4", "aac")) {
+                    return Outcome.Ok(publish(aFile))
+                }
+                onProgress(-1, "Converting audio…")
+                val m4a = File(jobDir, "mone_${System.currentTimeMillis()}.m4a")
+                val session = FFmpegKit.executeWithArguments(
+                    arrayOf("-y", "-i", aFile.absolutePath, "-vn", "-c:a", "aac", "-b:a", "192k", m4a.absolutePath),
+                )
+                return if (ReturnCode.isSuccess(session.returnCode) && m4a.exists() && m4a.length() > 0) {
+                    Outcome.Ok(publish(m4a))
+                } else {
+                    Outcome.Ok(publish(aFile)) // last resort: keep the raw audio
+                }
+            }
+
             // 1) Best single file (already has audio+video) — no merge needed.
             val r1 = runYtdlp(
                 common(
                     YtDlpRequest(url)
                         .setOutputTemplate("${jobDir.absolutePath}/%(title).80s.%(ext)s")
-                        .addOption("-f", "b"),
+                        .addOption("-f", format.single),
                 ),
                 cancelled, onProgress,
             )
@@ -91,7 +168,7 @@ object Downloader {
             if (r1?.isSuccess == true) {
                 val file = jobDir.listFiles()?.maxByOrNull { it.lastModified() }
                     ?: return Outcome.Err("Downloaded, but file not found.")
-                return Outcome.Ok(publish(file))
+                return Outcome.Ok(publish(trimmed(file)))
             }
 
             // 2) Separate streams (Pinterest/HLS) — download video + audio, then mux.
@@ -99,7 +176,7 @@ object Downloader {
             val rv = runYtdlp(
                 common(
                     YtDlpRequest(url).setOutputTemplate("${jobDir.absolutePath}/v.%(ext)s")
-                        .addOption("-f", "bv*").addOption("--hls-prefer-native"),
+                        .addOption("-f", format.video).addOption("--hls-prefer-native"),
                 ),
                 cancelled, onProgress,
             )
@@ -127,11 +204,11 @@ object Downloader {
             onProgress(-1, "Merging video + audio…")
             if (cancelled.get()) return Outcome.Cancelled
             val out = File(jobDir, "mone_${System.currentTimeMillis()}.mp4")
-            val session = FFmpegKit.execute(
-                "-y -i ${vFile.absolutePath} -i ${aFile.absolutePath} -c copy ${out.absolutePath}",
+            val session = FFmpegKit.executeWithArguments(
+                arrayOf("-y", "-i", vFile.absolutePath, "-i", aFile.absolutePath, "-c", "copy", out.absolutePath),
             )
             return if (ReturnCode.isSuccess(session.returnCode) && out.exists()) {
-                Outcome.Ok(publish(out))
+                Outcome.Ok(publish(trimmed(out)))
             } else {
                 Outcome.Err("Merge failed. Try again or a different link.")
             }

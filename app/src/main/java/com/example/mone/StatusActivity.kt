@@ -34,6 +34,35 @@ class StatusActivity : AppCompatActivity() {
             empty.visibility = View.VISIBLE
         }
         grid.adapter = StatusAdapter()
+
+        findViewById<android.widget.Button>(R.id.saveAllButton).setOnClickListener { saveAll() }
+    }
+
+    /** Save every viewed status at once, organized into date sub-folders. */
+    private fun saveAll() {
+        if (items.isEmpty()) {
+            Toast.makeText(this, "No statuses to save.", Toast.LENGTH_SHORT).show()
+            return
+        }
+        Toast.makeText(this, "Saving ${items.size} statuses…", Toast.LENGTH_SHORT).show()
+        val toSave = items.toList()
+        thread {
+            val dateFmt = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.getDefault())
+            var saved = 0
+            for (file in toSave) {
+                val dateDir = File(Downloader.downloadDir(), "Statuses/${dateFmt.format(java.util.Date(file.lastModified()))}").apply { mkdirs() }
+                var dest = File(dateDir, file.name)
+                var i = 1
+                while (dest.exists()) { dest = File(dateDir, "${file.nameWithoutExtension} ($i).${file.extension}"); i++ }
+                if (runCatching { file.copyTo(dest, overwrite = false) }.isSuccess) {
+                    MediaScannerConnection.scanFile(this, arrayOf(dest.absolutePath), null, null)
+                    saved++
+                }
+            }
+            runOnUiThread {
+                Toast.makeText(this, "Saved $saved statuses ✓ (Mone/Statuses)", Toast.LENGTH_LONG).show()
+            }
+        }
     }
 
     private fun preview(file: File) {

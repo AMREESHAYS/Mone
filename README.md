@@ -30,7 +30,7 @@ A clean, open-source Android video downloader powered by [yt-dlp](https://github
 <br/>
 
 <div align="center">
-<img src="images/screenshot-main.png" width="300" alt="Mone main screen" />
+<img src="images/screenshot-home.png" width="300" alt="Mone home screen" />
 </div>
 
 <br/>
@@ -38,15 +38,17 @@ A clean, open-source Android video downloader powered by [yt-dlp](https://github
 ## ✨ Features
 
 - 🔗 **Paste & download** — reels, posts, and videos from 1000+ sites yt-dlp supports.
+- 🎚️ **Quality picker** — choose Best / 1080p / 720p, or **Audio only (M4A)** to grab just the sound.
+- ✂️ **Clip trimmer** — download only a section of a video (e.g. `0:30`–`1:15`) instead of the whole thing.
 - 🖇️ **Download queue** — paste multiple links at once; they process a few at a time with a live list and per-item cancel.
 - 🌆 **Image links too** — direct image URLs are fetched straight to your gallery.
 - 📲 **Share to Mone** — share a reel straight from Instagram into the app. No copy-paste.
-- 🔐 **In-app Instagram login** — sign in with your own account for login-gated reels. Your session is kept in the app's private internal storage (not readable by other apps) and never shared.
+- 🔐 **In-app Instagram login** — sign in with your own account for login-gated reels. Your session is kept in the app's private internal storage (never shared), and the login shows *your* device, not a fake one.
 - 🎬 **Best quality** — grabs the best single file, or downloads video + audio separately and merges them with ffmpeg.
-- 🖼️ **Saves to your gallery** — into a dedicated `Mone` folder.
-- 💬 **WhatsApp status saver** — browse statuses you've viewed and save any photo or video to your gallery in a tap.
-- 🔔 **Notifications** — live download progress, tap when done to play.
-- 🕑 **History** — everything you've downloaded, one tap to replay.
+- 💬 **WhatsApp status saver** — browse statuses you've viewed and **save them all** to your gallery, organized by date.
+- 🔔 **Notifications & background downloads** — downloads keep running when you leave the app; tap the notification to play.
+- 🕑 **History & queue** — everything you've downloaded, one tap to replay.
+- 🔄 **Stays fresh** — the yt-dlp engine auto-updates, and the app checks GitHub for its own updates.
 
 ## 📥 Install
 

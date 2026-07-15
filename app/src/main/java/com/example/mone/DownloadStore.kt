@@ -15,6 +15,7 @@ object DownloadStore {
         @Volatile var title: String,
         @Volatile var state: State,
         @Volatile var percent: Int,
+        val format: String = "",
     )
 
     private val tasks = CopyOnWriteArrayList<Task>()

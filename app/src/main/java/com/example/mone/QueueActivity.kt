@@ -56,12 +56,15 @@ class QueueActivity : AppCompatActivity() {
         adapter.notifyDataSetChanged()
     }
 
-    private fun subtitle(t: DownloadStore.Task): String = when (t.state) {
-        DownloadStore.State.QUEUED -> "Queued"
-        DownloadStore.State.DOWNLOADING -> if (t.percent > 0) "Downloading · ${t.percent}%" else "Downloading…"
-        DownloadStore.State.DONE -> "Saved ✓"
-        DownloadStore.State.FAILED -> "Failed"
-        DownloadStore.State.CANCELLED -> "Cancelled"
+    private fun subtitle(t: DownloadStore.Task): String {
+        val fmt = if (t.format.isNotBlank()) " · ${t.format}" else ""
+        return when (t.state) {
+            DownloadStore.State.QUEUED -> "Queued$fmt"
+            DownloadStore.State.DOWNLOADING -> (if (t.percent > 0) "Downloading · ${t.percent}%" else "Downloading…") + fmt
+            DownloadStore.State.DONE -> "Saved ✓"
+            DownloadStore.State.FAILED -> "Failed"
+            DownloadStore.State.CANCELLED -> "Cancelled"
+        }
     }
 
     private inner class QueueAdapter : BaseAdapter() {

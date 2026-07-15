@@ -1,29 +1,23 @@
 package com.example.mone
 
-import android.Manifest
-import android.content.Intent
-import android.content.pm.PackageManager
-import android.net.Uri
-import android.os.Build
 import android.os.Bundle
-import android.provider.Settings
 import android.view.View
-import android.webkit.CookieManager
+import android.widget.ArrayAdapter
 import android.widget.Button
+import android.widget.CheckBox
 import android.widget.EditText
 import android.widget.ProgressBar
+import android.widget.Spinner
 import android.widget.TextView
 import android.widget.Toast
 import androidx.activity.enableEdgeToEdge
-import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.app.AppCompatActivity
-import androidx.core.content.ContextCompat
 import androidx.core.view.ViewCompat
 import androidx.core.view.WindowInsetsCompat
 
+/** Download screen: paste a link, pick quality, optionally trim, download. */
 class MainActivity : AppCompatActivity() {
 
-    private lateinit var loginButton: Button
     private lateinit var downloadButton: Button
     private lateinit var cancelButton: Button
     private lateinit var progressBar: ProgressBar
@@ -37,31 +31,29 @@ class MainActivity : AppCompatActivity() {
         enableEdgeToEdge()
         setContentView(R.layout.activity_main)
         ViewCompat.setOnApplyWindowInsetsListener(findViewById(R.id.main)) { v, insets ->
-            val systemBars = insets.getInsets(WindowInsetsCompat.Type.systemBars())
-            v.setPadding(systemBars.left, systemBars.top, systemBars.right, systemBars.bottom)
+            val bars = insets.getInsets(WindowInsetsCompat.Type.systemBars())
+            v.setPadding(bars.left, bars.top, bars.right, bars.bottom)
             insets
         }
-
-        Notifications.ensureChannel(this)
-        ensureStorageAccess()
-        ensureNotificationPermission()
 
         val urlInput = findViewById<EditText>(R.id.urlInput)
         downloadButton = findViewById(R.id.downloadButton)
         cancelButton = findViewById(R.id.cancelButton)
         progressBar = findViewById(R.id.progressBar)
         statusText = findViewById(R.id.statusText)
-        loginButton = findViewById(R.id.loginButton)
 
-        loginButton.setOnClickListener { onLoginButtonClicked() }
-        findViewById<Button>(R.id.historyButton).setOnClickListener {
-            startActivity(Intent(this, HistoryActivity::class.java))
-        }
-        findViewById<Button>(R.id.statusButton).setOnClickListener {
-            startActivity(Intent(this, StatusActivity::class.java))
-        }
-        findViewById<Button>(R.id.queueButton).setOnClickListener {
-            startActivity(Intent(this, QueueActivity::class.java))
+        val formatSpinner = findViewById<Spinner>(R.id.formatSpinner)
+        formatSpinner.adapter = ArrayAdapter(
+            this, android.R.layout.simple_spinner_dropdown_item,
+            DownloadFormat.values().map { it.label },
+        )
+
+        val trimCheck = findViewById<CheckBox>(R.id.trimCheck)
+        val trimRow = findViewById<View>(R.id.trimRow)
+        val trimStart = findViewById<EditText>(R.id.trimStart)
+        val trimEnd = findViewById<EditText>(R.id.trimEnd)
+        trimCheck.setOnCheckedChangeListener { _, checked ->
+            trimRow.visibility = if (checked) View.VISIBLE else View.GONE
         }
 
         downloadButton.setOnClickListener {
@@ -72,18 +64,21 @@ class MainActivity : AppCompatActivity() {
             }
             val urls = Regex("""https?://\S+""").findAll(text).map { it.value }.toList()
                 .ifEmpty { listOf(text) }
+            val format = DownloadFormat.values()[formatSpinner.selectedItemPosition.coerceIn(0, DownloadFormat.values().lastIndex)]
+            val tStart = if (trimCheck.isChecked) parseTime(trimStart.text.toString()) else -1
+            val tEnd = if (trimCheck.isChecked) parseTime(trimEnd.text.toString()) else -1
 
             if (urls.size == 1) {
-                activeJobId = DownloadService.enqueue(this, urls[0])
+                activeJobId = DownloadService.enqueue(this, urls[0], format, tStart, tEnd)
                 statusText.text = "Starting…"
                 progressBar.visibility = View.VISIBLE
                 progressBar.isIndeterminate = true
                 downloadButton.isEnabled = false
                 cancelButton.visibility = View.VISIBLE
             } else {
-                urls.forEach { DownloadService.enqueue(this, it) }
+                urls.forEach { DownloadService.enqueue(this, it, format, tStart, tEnd) }
                 Toast.makeText(this, "Added ${urls.size} to the queue", Toast.LENGTH_SHORT).show()
-                startActivity(Intent(this, QueueActivity::class.java))
+                startActivity(android.content.Intent(this, QueueActivity::class.java))
             }
         }
 
@@ -100,11 +95,6 @@ class MainActivity : AppCompatActivity() {
     override fun onStop() {
         super.onStop()
         DownloadBus.removeListener(busListener)
-    }
-
-    override fun onResume() {
-        super.onResume()
-        refreshLoginButton()
     }
 
     private fun onDownloadUpdate(u: DownloadBus.Update) {
@@ -134,68 +124,20 @@ class MainActivity : AppCompatActivity() {
         progressBar.isIndeterminate = false
     }
 
-    private fun refreshLoginButton() {
-        loginButton.text =
-            if (Downloader.cookiesFile(this).exists()) "Instagram: logged in ✓  (tap to log out)"
-            else "Log in to Instagram"
-    }
-
-    private fun onLoginButtonClicked() {
-        if (Downloader.cookiesFile(this).exists()) {
-            Downloader.cookiesFile(this).delete()
-            CookieManager.getInstance().removeAllCookies(null)
-            CookieManager.getInstance().flush()
-            Toast.makeText(this, "Logged out", Toast.LENGTH_SHORT).show()
-            refreshLoginButton()
-        } else {
-            AlertDialog.Builder(this)
-                .setTitle("Why log in?")
-                .setMessage(
-                    "Instagram only lets logged-in users download reels.\n\n" +
-                        "Sign in with your account so Mone can save them for you. " +
-                        "Your login stays on your phone — it's never shared.",
-                )
-                .setNegativeButton("Not now", null)
-                .setPositiveButton("Continue") { _, _ ->
-                    startActivity(Intent(this, LoginActivity::class.java))
-                }
-                .show()
-        }
-    }
-
-    /** Ask for notification permission (Android 13+) so download alerts can show. */
-    private fun ensureNotificationPermission() {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) return
-        if (ContextCompat.checkSelfPermission(this, Manifest.permission.POST_NOTIFICATIONS)
-            != PackageManager.PERMISSION_GRANTED
-        ) {
-            requestPermissions(arrayOf(Manifest.permission.POST_NOTIFICATIONS), 1)
-        }
-    }
-
-    /** On first launch, ask for the file access Mone needs to save into its own folder. */
-    private fun ensureStorageAccess() {
-        if (Downloader.hasStorageAccess()) return
-        AlertDialog.Builder(this)
-            .setTitle("Allow file access")
-            .setMessage("Mone saves videos into a \"Mone\" folder on your storage. Please turn on \"All files access\" on the next screen.")
-            .setCancelable(false)
-            .setNegativeButton("Later", null)
-            .setPositiveButton("Open settings") { _, _ -> openAllFilesAccess() }
-            .show()
-    }
-
-    private fun openAllFilesAccess() {
-        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R) return
-        try {
-            startActivity(
-                Intent(
-                    Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION,
-                    Uri.parse("package:$packageName"),
-                ),
-            )
+    /** "m:ss" / "h:mm:ss" / plain seconds → seconds; -1 if blank or invalid. */
+    private fun parseTime(s: String): Int {
+        val t = s.trim()
+        if (t.isEmpty()) return -1
+        return try {
+            val parts = t.split(":").map { it.trim().toInt() }
+            when (parts.size) {
+                1 -> parts[0]
+                2 -> parts[0] * 60 + parts[1]
+                3 -> parts[0] * 3600 + parts[1] * 60 + parts[2]
+                else -> -1
+            }
         } catch (e: Exception) {
-            startActivity(Intent(Settings.ACTION_MANAGE_ALL_FILES_ACCESS_PERMISSION))
+            -1
         }
     }
 }

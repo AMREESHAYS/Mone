@@ -32,9 +32,13 @@ class LoginActivity : AppCompatActivity() {
         webView.settings.apply {
             javaScriptEnabled = true
             domStorageEnabled = true
-            // A real mobile browser UA — Instagram blocks unknown WebView UAs.
+            // Report a Chrome UA with the user's REAL device (so Instagram's login alert
+            // shows their actual phone, not a hardcoded "Pixel 7"). A Chrome-style UA is
+            // used because Instagram blocks the raw WebView user-agent.
+            val model = android.os.Build.MODEL.ifBlank { "Android" }
+            val release = android.os.Build.VERSION.RELEASE.ifBlank { "13" }
             userAgentString =
-                "Mozilla/5.0 (Linux; Android 13; Pixel 7) AppleWebKit/537.36 " +
+                "Mozilla/5.0 (Linux; Android $release; $model) AppleWebKit/537.36 " +
                 "(KHTML, like Gecko) Chrome/120.0.0.0 Mobile Safari/537.36"
         }
 
