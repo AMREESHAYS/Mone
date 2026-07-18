@@ -22,6 +22,7 @@ class HistoryActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_history)
+        findViewById<View>(R.id.historyRoot).applyBarInsets()
 
         val list = findViewById<ListView>(R.id.historyList)
         val empty = findViewById<TextView>(R.id.emptyView)

@@ -24,6 +24,7 @@ class StatusActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_status)
+        findViewById<View>(R.id.statusRoot).applyBarInsets()
 
         val grid = findViewById<GridView>(R.id.statusGrid)
         val empty = findViewById<TextView>(R.id.emptyView)

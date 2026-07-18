@@ -121,6 +121,8 @@ Only for login-gated reels. Instagram serves nothing to anonymous requests for t
 
 Issues and pull requests are welcome. Fork it, branch, and open a PR.
 
+> **Note for forkers:** this repo's commit history was rewritten in July 2026 to correct commit authorship, and the repository was detached from its earlier fork network. If you have an **older fork**, please **re-fork from the current `main`** to avoid stale history.
+
 ## 📄 Disclaimer
 
 Mone is for **personal use only**. Downloading content may violate the terms of service of Instagram, YouTube, Pinterest, and other platforms, and redistributing others' content may infringe copyright. **You are solely responsible for how you use this app.** It is not affiliated with, endorsed by, or connected to any of these platforms.

@@ -24,6 +24,7 @@ class QueueActivity : AppCompatActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_queue)
+        findViewById<View>(R.id.queueRoot).applyBarInsets()
 
         list = findViewById(R.id.queueList)
         empty = findViewById(R.id.emptyView)
