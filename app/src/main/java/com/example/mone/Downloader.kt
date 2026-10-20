@@ -27,12 +27,12 @@ enum class DownloadFormat(val label: String) {
     P720("720p"),
     AUDIO("Audio (M4A)");
 
-    /** yt-dlp single-file selector (video modes). */
+    /** yt-dlp single-file selector (video modes). Prefers mp4: some sites rank formats Android can't play (e.g. Theora .ogv) first. */
     val single: String
         get() = when (this) {
-            BEST -> "b"
-            P1080 -> "b[height<=1080]"
-            P720 -> "b[height<=720]"
+            BEST -> "b[ext=mp4]/b"
+            P1080 -> "b[height<=1080][ext=mp4]/b[height<=1080]"
+            P720 -> "b[height<=720][ext=mp4]/b[height<=720]"
             AUDIO -> "ba/bestaudio/best"
         }
 

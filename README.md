@@ -80,14 +80,14 @@ Other heavy-handed skins (Samsung One UI, Oppo/Realme ColorOS, Vivo Funtouch) ha
 
 ## 🌐 Site support
 
-yt-dlp knows 1000+ sites, but many block the free on-device engine (no browser impersonation, no JavaScript runtime) or need an account. Tested in October 2026 with the bundled yt-dlp (2026.06.09), public posts, no login:
+yt-dlp knows 1000+ sites, but many block the free on-device engine (no browser impersonation, no JavaScript runtime) or need an account. Tested in October 2026 by downloading a current public post from each site in Mone itself (bundled yt-dlp 2026.06.09, no login):
 
 | | Sites |
 |---|---|
-| ✅ Works | X / Twitter (up to 4K), Pinterest, Imgur, Tumblr, Bluesky, LinkedIn, 9GAG, Rumble, Archive.org, Twitch clips, Kick clips, SoundCloud, Bilibili, VK |
-| ⚠️ Some links | Facebook, Dailymotion, Snapchat Spotlight |
+| ✅ Works | X / Twitter (up to 4K), Pinterest, Rumble, Twitch clips, Kick clips, LinkedIn, Snapchat Spotlight, Bluesky, Imgur, VK, Archive.org, Dailymotion, Bilibili, SoundCloud, Bandcamp, Mixcloud (slow) |
+| ⚠️ Some links | Facebook (public videos only) |
 | 🔐 Needs login | Instagram (use the in-app login) |
-| ❌ Doesn't work | Vimeo and TikTok (block the engine), Reddit (needs a logged-in account; Mone only supports Instagram login), Bandcamp, Threads (not supported by yt-dlp) |
+| ❌ Doesn't work | Vimeo, TikTok, Tumblr and 9GAG (block the engine), Reddit (needs a logged-in account; Mone only supports Instagram login), Threads (not supported by yt-dlp) |
 | 🎲 Unreliable | YouTube (see FAQ) |
 
 Sites change often, so this list can go out of date between releases.
@@ -116,7 +116,7 @@ Mone is a thin Kotlin front-end. The heavy lifting is done by:
 ## ⚠️ Limitations
 
 - Instagram reels require logging in with your own account.
-- Vimeo, TikTok and Reddit don't work (see [Site support](#-site-support)).
+- Vimeo, TikTok, Tumblr, 9GAG and Reddit don't work (see [Site support](#-site-support)).
 - Uses the free/LGPL ffmpeg build — some codecs and max-resolution merges may be limited.
 - yt-dlp is bundled at a fixed version and only updates with new app releases; sites change often, so an extractor can break until the next release.
 - Built on a young third-party library — treat as experimental.
