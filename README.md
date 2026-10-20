@@ -84,7 +84,7 @@ yt-dlp knows 1000+ sites, but many block the free on-device engine (no browser i
 
 | | Sites |
 |---|---|
-| ✅ Works | Pinterest, Imgur, Tumblr, Bluesky, LinkedIn, 9GAG, Rumble, Archive.org, Twitch clips, Kick clips, SoundCloud, Bilibili, VK |
+| ✅ Works | X / Twitter (up to 4K), Pinterest, Imgur, Tumblr, Bluesky, LinkedIn, 9GAG, Rumble, Archive.org, Twitch clips, Kick clips, SoundCloud, Bilibili, VK |
 | ⚠️ Some links | Facebook, Dailymotion, Snapchat Spotlight |
 | 🔐 Needs login | Instagram (use the in-app login) |
 | ❌ Doesn't work | Vimeo and TikTok (block the engine), Reddit (needs a logged-in account; Mone only supports Instagram login), Bandcamp, Threads (not supported by yt-dlp) |
