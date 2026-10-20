@@ -39,16 +39,16 @@ A clean, open-source Android video downloader powered by [yt-dlp](https://github
 
 - 🔗 **Paste & download** — reels, posts, and videos from 1000+ sites yt-dlp supports.
 - 🎚️ **Quality picker** — choose Best / 1080p / 720p, or **Audio only (M4A)** to grab just the sound.
-- ✂️ **Clip trimmer** — download only a section of a video (e.g. `0:30`–`1:15`) instead of the whole thing.
+- ✂️ **Clip trimmer** — keep only a section of a video or audio track (e.g. `0:30`–`1:15`). The full file is downloaded, then cut without re-encoding, so cuts land on the nearest keyframe.
 - 🖇️ **Download queue** — paste multiple links at once; they process a few at a time with a live list and per-item cancel.
 - 🌆 **Image links too** — direct image URLs are fetched straight to your gallery.
 - 📲 **Share to Mone** — share a reel straight from Instagram into the app. No copy-paste.
 - 🔐 **In-app Instagram login** — sign in with your own account for login-gated reels. Your session is kept in the app's private internal storage (never shared), and the login shows *your* device, not a fake one.
-- 🎬 **Best quality** — grabs the best single file, or downloads video + audio separately and merges them with ffmpeg.
+- 🎬 **Ready-to-play files** — grabs the best file that already has sound; if a site only serves video and audio separately, downloads both and merges them with ffmpeg. (On sites like YouTube, this can mean "Best" is below the maximum resolution.)
 - 💬 **WhatsApp status saver** — browse statuses you've viewed and **save them all** to your gallery, organized by date.
 - 🔔 **Notifications & background downloads** — downloads keep running when you leave the app; tap the notification to play.
 - 🕑 **History & queue** — everything you've downloaded, one tap to replay.
-- 🔄 **Stays fresh** — the yt-dlp engine auto-updates, and the app checks GitHub for its own updates.
+- 🔄 **Update check** — the app checks GitHub for new releases and offers to install them. The yt-dlp engine is bundled, so it updates with each app release.
 
 ## 📥 Install
 
@@ -80,7 +80,7 @@ Other heavy-handed skins (Samsung One UI, Oppo/Realme ColorOS, Vivo Funtouch) ha
 
 ## 🛠️ Build from source
 
-Requires Android Studio, JDK 17+, and a device/emulator (`arm64-v8a` or `x86_64`).
+Requires Android Studio, JDK 17+, and an `arm64-v8a` device. An `x86_64` emulator runs the app, but ffmpeg-kit ships no `x86_64` libraries, so trimming, merging and audio conversion fail there.
 
 ```bash
 git clone https://github.com/AMREESHAYS/Mone.git
@@ -103,7 +103,7 @@ Mone is a thin Kotlin front-end. The heavy lifting is done by:
 
 - Instagram reels require logging in with your own account.
 - Uses the free/LGPL ffmpeg build — some codecs and max-resolution merges may be limited.
-- yt-dlp is bundled at a fixed version; sites change often, so an extractor can break until the library updates.
+- yt-dlp is bundled at a fixed version and only updates with new app releases; sites change often, so an extractor can break until the next release.
 - Built on a young third-party library — treat as experimental.
 
 ## ❓ FAQ

@@ -67,6 +67,15 @@ class MainActivity : AppCompatActivity() {
             val format = DownloadFormat.values()[formatSpinner.selectedItemPosition.coerceIn(0, DownloadFormat.values().lastIndex)]
             val tStart = if (trimCheck.isChecked) parseTime(trimStart.text.toString()) else -1
             val tEnd = if (trimCheck.isChecked) parseTime(trimEnd.text.toString()) else -1
+            if (trimCheck.isChecked && (
+                    (trimStart.text.isNotBlank() && tStart < 0) ||
+                        (trimEnd.text.isNotBlank() && tEnd < 0) ||
+                        (tEnd >= 0 && tEnd <= maxOf(tStart, 0))
+                    )
+            ) {
+                statusText.text = "Check the trim times (e.g. 0:30 to 1:15; end after start)."
+                return@setOnClickListener
+            }
 
             if (urls.size == 1) {
                 activeJobId = DownloadService.enqueue(this, urls[0], format, tStart, tEnd)

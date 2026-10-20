@@ -50,9 +50,10 @@ class HistoryActivity : AppCompatActivity() {
                 Toast.makeText(this, "File not available.", Toast.LENGTH_SHORT).show()
             } else {
                 try {
+                    val u = Uri.parse(uri)
                     startActivity(
                         Intent(Intent.ACTION_VIEW)
-                            .setDataAndType(Uri.parse(uri), "video/*")
+                            .setDataAndType(u, contentResolver.getType(u) ?: "*/*")
                             .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION),
                     )
                 } catch (e: Exception) {

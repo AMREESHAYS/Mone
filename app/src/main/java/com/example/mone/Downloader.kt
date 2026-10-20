@@ -85,9 +85,6 @@ object Downloader {
         fun common(req: YtDlpRequest): YtDlpRequest {
             if (cookies.exists()) req.addOption("--cookies", cookies.absolutePath)
             return req.addOption("--no-playlist")
-                .addOption("--retries", "3")
-                .addOption("--extractor-retries", "3")
-                .addOption("--socket-timeout", "30")
         }
 
         val jobDir = File(outDir, ".mone_job_${System.currentTimeMillis()}").apply { mkdirs() }
@@ -130,15 +127,16 @@ object Downloader {
                 val ra = runYtdlp(
                     common(
                         YtDlpRequest(url).setOutputTemplate("${jobDir.absolutePath}/a.%(ext)s")
-                            .addOption("-f", "ba[ext=m4a]/ba/bestaudio/best").addOption("--hls-prefer-native"),
+                            .addOption("-f", "ba[ext=m4a]/ba/bestaudio/best"),
                     ),
                     cancelled, onProgress,
                 )
                 if (cancelled.get()) return Outcome.Cancelled
-                val aFile = jobDir.listFiles { f -> f.name.startsWith("a.") }?.firstOrNull()
-                if (ra?.isSuccess != true || aFile == null) {
+                val raw = jobDir.listFiles { f -> f.name.startsWith("a.") }?.firstOrNull()
+                if (ra?.isSuccess != true || raw == null) {
                     return Outcome.Err(humanize(ra?.errorOutput.orEmpty()))
                 }
+                val aFile = trimmed(raw)
                 // Already m4a/mp4 (AAC) → publish as-is, no re-encode.
                 if (aFile.extension.lowercase() in setOf("m4a", "mp4", "aac")) {
                     return Outcome.Ok(publish(aFile))
@@ -176,7 +174,7 @@ object Downloader {
             val rv = runYtdlp(
                 common(
                     YtDlpRequest(url).setOutputTemplate("${jobDir.absolutePath}/v.%(ext)s")
-                        .addOption("-f", format.video).addOption("--hls-prefer-native"),
+                        .addOption("-f", format.video),
                 ),
                 cancelled, onProgress,
             )
@@ -186,7 +184,7 @@ object Downloader {
             val ra = runYtdlp(
                 common(
                     YtDlpRequest(url).setOutputTemplate("${jobDir.absolutePath}/a.%(ext)s")
-                        .addOption("-f", "ba").addOption("--hls-prefer-native"),
+                        .addOption("-f", "ba"),
                 ),
                 cancelled, onProgress,
             )
@@ -212,7 +210,7 @@ object Downloader {
             } else {
                 Outcome.Err("Merge failed. Try again or a different link.")
             }
-        } catch (e: Exception) {
+        } catch (e: Throwable) { // Throwable: a missing ffmpeg native lib throws an Error, not an Exception
             return if (cancelled.get()) Outcome.Cancelled else Outcome.Err("Error: ${e.message}")
         } finally {
             jobDir.deleteRecursively()
@@ -276,7 +274,9 @@ object Downloader {
             }
             future.get()
         } catch (e: Exception) {
-            null
+            // The library reports yt-dlp failures by throwing (its errorOutput is always empty),
+            // so keep the message for humanize().
+            YtDlpResponse(1, "", (e.cause ?: e).message.orEmpty())
         }
     }
 
@@ -292,7 +292,8 @@ object Downloader {
             "Couldn't find a downloadable video at that link."
         raw.contains("not a bot", true) ||
             raw.contains("Too Many Requests", true) ||
-            raw.contains("HTTP Error 429", true) ->
+            raw.contains("HTTP Error 429", true) ||
+            raw.contains("HTTP Error 403", true) ->
             "This site is rate-limiting or blocking automated downloads right now. Try again later."
         raw.contains("empty media response", true) ||
             (raw.contains("login", true) && raw.contains("instagram", true)) ->

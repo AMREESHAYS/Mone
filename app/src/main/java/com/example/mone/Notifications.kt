@@ -76,7 +76,7 @@ object Notifications {
             .setAutoCancel(true)
         if (uri != null) {
             val view = Intent(Intent.ACTION_VIEW)
-                .setDataAndType(uri, "video/*")
+                .setDataAndType(uri, context.contentResolver.getType(uri) ?: "*/*")
                 .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
             builder.setContentIntent(
                 PendingIntent.getActivity(

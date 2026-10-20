@@ -33,7 +33,6 @@ class HomeActivity : AppCompatActivity() {
         }
 
         Notifications.ensureChannel(this)
-        YtdlpUpdater.maybeUpdate(this) // keep yt-dlp fresh (once/day)
         AppUpdater.maybeCheck(this) // offer a newer app release (once/day)
         ensureStorageAccess()
         ensureNotificationPermission()
