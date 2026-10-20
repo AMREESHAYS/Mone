@@ -48,23 +48,30 @@ class StatusActivity : AppCompatActivity() {
         Toast.makeText(this, "Saving ${items.size} statuses…", Toast.LENGTH_SHORT).show()
         val toSave = items.toList()
         thread {
-            val dateFmt = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.getDefault())
-            var saved = 0
-            for (file in toSave) {
-                val dateDir = File(Downloader.downloadDir(), "Statuses/${dateFmt.format(java.util.Date(file.lastModified()))}").apply { mkdirs() }
-                var dest = File(dateDir, file.name)
-                var i = 1
-                while (dest.exists()) { dest = File(dateDir, "${file.nameWithoutExtension} ($i).${file.extension}"); i++ }
-                if (runCatching { file.copyTo(dest, overwrite = false) }.isSuccess) {
-                    MediaScannerConnection.scanFile(this, arrayOf(dest.absolutePath), null, null)
-                    saved++
-                }
-            }
+            val results = toSave.map { copyStatus(it) }
+            val saved = results.count { it == true }
+            val already = results.count { it == false }
             runOnUiThread {
-                Toast.makeText(this, "Saved $saved statuses ✓ (Mone/Statuses)", Toast.LENGTH_LONG).show()
+                val skipped = if (already > 0) ", $already already saved" else ""
+                Toast.makeText(this, "Saved $saved statuses ✓$skipped (Mone/Statuses)", Toast.LENGTH_LONG).show()
             }
         }
     }
+
+    /**
+     * Copies [file] into Mone/Statuses/<date>/. Returns true if copied, false if an identical
+     * copy (same name and size) is already there, null on failure. WhatsApp status file names
+     * are unique, so name + size identifies a status; a size mismatch is a broken copy and is replaced.
+     */
+    private fun copyStatus(file: File): Boolean? = runCatching {
+        val day = java.text.SimpleDateFormat("yyyy-MM-dd", java.util.Locale.US).format(java.util.Date(file.lastModified()))
+        val dest = File(Downloader.downloadDir(), "Statuses/$day/${file.name}")
+        if (dest.exists() && dest.length() == file.length()) return@runCatching false
+        dest.parentFile?.mkdirs()
+        file.copyTo(dest, overwrite = true)
+        MediaScannerConnection.scanFile(this, arrayOf(dest.absolutePath), null, null)
+        true
+    }.getOrNull()
 
     private fun preview(file: File) {
         try {
@@ -85,19 +92,15 @@ class StatusActivity : AppCompatActivity() {
     private fun save(file: File) {
         Toast.makeText(this, "Saving…", Toast.LENGTH_SHORT).show()
         thread {
-            val dir = File(Downloader.downloadDir(), "Statuses").apply { mkdirs() }
-            var dest = File(dir, file.name)
-            var i = 1
-            while (dest.exists()) {
-                dest = File(dir, "${file.nameWithoutExtension} ($i).${file.extension}")
-                i++
-            }
-            val ok = runCatching { file.copyTo(dest, overwrite = false) }.isSuccess
-            if (ok) MediaScannerConnection.scanFile(this, arrayOf(dest.absolutePath), null, null)
+            val result = copyStatus(file)
             runOnUiThread {
                 Toast.makeText(
                     this,
-                    if (ok) "Saved ✓  (Mone/Statuses)" else "Couldn't save this status.",
+                    when (result) {
+                        true -> "Saved ✓  (Mone/Statuses)"
+                        false -> "Already saved ✓"
+                        null -> "Couldn't save this status."
+                    },
                     Toast.LENGTH_SHORT,
                 ).show()
             }
